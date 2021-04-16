@@ -1,7 +1,7 @@
 # AntiNoobRaid Introduction
 Anti Noob Raid prevents doing damage to entities placed by a new player.
 For this plugin to work, Playtime Tracker is needed to monitor how long players are on the server.
-Time period inside which players cannot get raided is configurable in config file, by default it is 86400 (seconds).
+Time period inside which players cannot get raided is configurable in config file, by default it is 43200 (seconds).
 
 ## Permissions
 
