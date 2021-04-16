@@ -1,4 +1,4 @@
-﻿using Oxide.Core;
+using Oxide.Core;
 using System;
 using System.Collections.Generic;
 using Oxide.Core.Plugins;
@@ -10,7 +10,7 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "Slydelix", "1.8.5", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "Slydelix & RustySpoon", "1.8.6", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, GameTipAPI, Clans;
@@ -48,20 +48,14 @@ namespace Oxide.Plugins
             public bool AllowTwigDestruction;
             [JsonProperty("Check full ownership of the base instead of only one block")]
             public bool CheckFullOwnership;
-            [JsonProperty("Check Steam for in game time")]
-            public bool CheckSteam;
             [JsonProperty("Days of inactivity after which player will be raidable")]
             public double InactivityRemove;
             [JsonProperty("Ignore twig when calculating base ownership (prevents exploiting)")]
             public bool IgnoreTwig;
-            [JsonProperty("In-game steam time which mark player as non-noob (hours)")]
-            public double SteamInGameTime;
             [JsonProperty("Kill fireballs when someone tries to raid protected player with fire (prevents lag)")]
             public bool KillFire;
             [JsonProperty("List of entities that can be destroyed even if owner is a noob, true = destroyable everywhere (not inside of owners TC range)")]
             public Dictionary<string, bool> AllowedEntities = PlaceHolderDictionary;
-            [JsonProperty("Manual Mode")]
-            public bool ManualMode;
             [JsonProperty("Notify player on first connection with protection time")]
             public bool MessageOnFirstConnection;
             [JsonProperty("Prevent new players from raiding")]
@@ -80,8 +74,6 @@ namespace Oxide.Plugins
             public bool ShowMessage;
             [JsonProperty("Show time until raidable")]
             public bool ShowTime;
-            [JsonProperty("Steam API key")]
-            public string ApiKey;
             [JsonProperty("Time (seconds) after which noob will lose protection (in-game time)")]
             public int ProtectionTime;
             [JsonProperty("Use game tips to send first connection message to players")]
@@ -104,31 +96,27 @@ namespace Oxide.Plugins
 
             public static readonly ConfigFile DefaultConfigFile = new ConfigFile
             {
-                UnNoobManual = true,
-                ProtectionTime = 21600,
-                SteamInGameTime = 200,
+                UnNoobManual = false,
+                ProtectionTime = 43200,
                 Frequency = 30,
-                RefundTimes = 1,
-                InactivityRemove = 7,
-                ApiKey = string.Empty,
+                RefundTimes = 4,
+                InactivityRemove = 3,
                 CheckFullOwnership = true,
-                CheckSteam = true,
                 CheckClanForOwner = true,
                 RemoveClanProtection = false,
                 Refund = true,
                 IgnoreTwig = true,
                 KillFire = true,
-                ManualMode = false,
                 MessageOnFirstConnection = true,
                 UseGT = true,
-                AllowTwigDestruction = true,
+                AllowTwigDestruction = false,
                 ShowMessage = true,
                 ShowTime = false,
                 PreventNew = true,
-                UnNoobNew = true,
+                UnNoobNew = false,
                 AllowedEntities = PlaceHolderDictionary,
                 CheckTeamForOwner = true,
-                RemoveTeamProtection = true,
+                RemoveTeamProtection = false,
                 //AutoAddProtection = true,
                 //AutoMinutes = 60
             };
@@ -154,7 +142,7 @@ namespace Oxide.Plugins
                 {"NoPlayerFound", "Couldn't find '{0}'"},
                 {"NotNumber",  "{0} is not a number" },
 
-                {"antinoobcmd_syntax", "Wrong syntax! /antinoob <addnoob|checksteam|removenoob|wipe>" },
+                {"antinoobcmd_syntax", "Wrong syntax! /antinoob <addnoob|removenoob|wipe>" },
                 {"antinoobcmd_addnoob_syntax", "Wrong syntax! /antinoob addnoob <name/steamid>" },
                 {"antinoobcmd_alreadynoob", "{0} is already marked as a noob" },
                 {"antinoobcmd_marked", "Marked {0} as a noob" },
@@ -172,17 +160,8 @@ namespace Oxide.Plugins
                 {"console_lostnoobstatus", "{0} hasn't connected for {1} days so he lost his noob status (can be raided)"},
                 {"console_notenough", "{0} doesn't have enough hours in game to be marked as a non-noob"},
 
-                {"rn_manual", "This will remove your noob status, type /removenoob 'yes' to confirm." },
-                {"rn_success", "Successfully removed your noob status" },
 
                 {"firstconnectionmessage", "You are a new player so your buildings are protected for first {0} hours of your time on server"},
-
-                {"steam_checkstart", "{0} connected, checking Steam"},
-                {"steam_marking", "Marking {0} as non noob"},
-                {"steam_connected", "{0} has connected with {1} in game hours"},
-                {"steam_private", "Steam profile of {0} is private"},
-                {"steam_responsewrong", "Failed to contact steam API, profile is private/wrong API key"},
-                {"steam_wrongapikey", "Invalid API key"},
 
                 {"pt_notInstalled_first", "Playtime Tracker is not installed, will check again in 30 seconds"},
                 {"pt_notInstalled", "Playtime Tracker is not installed!"},
@@ -301,27 +280,6 @@ namespace Oxide.Plugins
         StoredData storedData;
 
         #endregion
-        #region Steam
-
-        private class SteamGames
-        {
-            public Content response;
-
-            public class Content
-            {
-                public int game_count;
-                public Game[] games;
-
-                public class Game
-                {
-                    public uint appid;
-                    public int playtime_2weeks;
-                    public int playtime_forever;
-                }
-            }
-        }
-
-        #endregion
         #region Hooks
 
         private void Init()
@@ -347,18 +305,6 @@ namespace Oxide.Plugins
 
             foreach (var entry in storedData.players.Where(x => !storedData.lastConnection.ContainsKey(x.Key)))
                 storedData.lastConnection.Add(entry.Key, string.Empty);
-
-            if (!config.ManualMode)
-            {
-                StartChecking();
-                CheckPlayersWithNoInfo();
-            }
-
-            timer.Every(60f, RefreshClanCache);
-
-            if (config.ManualMode)
-                foreach (var p in BasePlayer.activePlayerList.Where(x => !storedData.players.ContainsKey(x.userID)))
-                    storedData.players.Add(p.userID, -50d);
 
             if (PlaytimeTracker == null)
             {
@@ -408,13 +354,11 @@ namespace Oxide.Plugins
                 {
                     RaidTimerDictionary[owner]?.Destroy();
                     if (RaidTimerDictionary.ContainsKey(owner)) RaidTimerDictionary.Remove(owner);
-
                     RaidTimerDictionary.Add(owner, timer.Once(60f * config.AutoMinutes, () => {
                         storedData.players[owner] = -25d;
                         if (RaidTimerDictionary.ContainsKey(owner)) RaidTimerDictionary.Remove(owner);
                     }));
                 }  
-
                 else RaidTimerDictionary.Add(owner, timer.Once(60f * config.AutoMinutes, () => {
                     storedData.players[owner] = -25d;
                     if (RaidTimerDictionary.ContainsKey(owner)) RaidTimerDictionary.Remove(owner);
@@ -453,15 +397,6 @@ namespace Oxide.Plugins
                     {
                         if (ownerPlayer.currentTeam == attacker.currentTeam && ownerPlayer.currentTeam != 0) return null;
                     }
-                }
-            }
-                                               //I kinda forgot why this check is needed :/
-            if (config.RemoveTeamProtection && !string.IsNullOrEmpty(hitinfo?.WeaponPrefab?.ShortPrefabName))
-            {
-                if (attacker.currentTeam != 0)
-                {
-                    var team = RelationshipManager.Instance?.teams[attacker.currentTeam];
-                    foreach (var member in team.members) storedData.players[member] = -50d;
                 }
             }
 
@@ -590,28 +525,6 @@ namespace Oxide.Plugins
         {
             BasePlayer bp = player.Object as BasePlayer;
             LastConnect(bp.userID);
-
-            if (config.ManualMode)
-            {
-                if (!storedData.players.ContainsKey(bp.userID))
-                {
-                    storedData.players.Add(bp.userID, -50d);
-                    return;
-                }
-
-                if (storedData.players[bp.userID] == -50d || storedData.players[bp.userID] == -25d) return;
-                storedData.players[bp.userID] = -50d;
-                return;
-            }
-
-            SteamCheck(bp.userID, true);
-
-            if (storedData.players.ContainsKey(bp.userID))
-                if (storedData.players[bp.userID] == -50d || storedData.players[bp.userID] == -25d) return;
-
-            APICall(bp.userID);
-
-            timer.Once(10f, () => FirstMessage(bp));
         }
 
         private void Unload()
@@ -1081,83 +994,6 @@ namespace Oxide.Plugins
                 Check();
             });
         }
-
-        private void SteamCheck(ulong ID, bool connecting)
-        {
-            if (!config.CheckSteam) return;
-            if (string.IsNullOrEmpty(config.ApiKey))
-            {
-                Puts(lang.GetMessage("steam_wrongapikey", this, null));
-                return;
-            }
-
-            string date = "[" + DateTime.Now.ToString() + "] ";
-
-            if (storedData.players.ContainsKey(ID))
-            {
-                if (storedData.players[ID] == -50d)
-                {
-                    LogToFile(this.Name, date + "Player " + ID + " is already marked as non noob", this, false);
-                    return;
-                }
-
-                else if (storedData.players[ID] == -25d)
-                {
-                    LogToFile(this.Name, date + "Player " + ID + " is already marked as noob (-25)", this, false);
-                    return;
-                }
-            }
-
-            Puts(lang.GetMessage("steam_checkstart", this, null), ID);
-
-            webrequest.Enqueue("http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=" + config.ApiKey + "&steamid=" + ID, null, (code, response) =>
-            {
-                if (code != 200)
-                {
-                    Puts(lang.GetMessage("steam_responsewrong", this, null));
-                    LogToFile(this.Name, date + "Invalid response for " + ID + " (" + code + ")", this, false);
-                    return;
-                }
-
-                var des = Utility.ConvertFromJson<SteamGames>(response);
-                if (des?.response?.games == null)
-                {
-                    Puts(lang.GetMessage("steam_private", this, null), ID);
-                    LogToFile(this.Name, date + "Steam profile of " + ID + " is private", this, false);
-                    return;
-                }
-
-                foreach (var game in des.response.games)
-                {
-                    if (game.appid == 252490)
-                    {
-                        double hours = game.playtime_forever / 60d;
-
-                        if (connecting) Puts(lang.GetMessage("steam_connected", this, null), ID, System.Math.Round(hours, 2));
-
-                        if (hours >= config.SteamInGameTime)
-                        {
-                            Puts(lang.GetMessage("steam_marking", this, null), ID);
-                            LogToFile(this.Name, date + ID + " has " + hours + "h in game", this, false);
-
-                            if (!storedData.players.ContainsKey(ID))
-                            {
-                                LogToFile(this.Name, date + "Adding new entry for " + ID, this, false);
-                                storedData.players.Add(ID, -50d);
-                                return;
-                            }
-
-                            LogToFile(this.Name, date + "Overwriting existing entry for " + ID, this, false);
-                            storedData.players[ID] = -50d;
-                            return;
-                        }
-
-                        Puts(lang.GetMessage("console_notenough", this, null));
-                    }
-                }
-            }, this);
-        }
-
         #endregion
         #region Commands
         private Dictionary<string, string> AdminCommands = new Dictionary<string, string>
@@ -1242,18 +1078,6 @@ namespace Oxide.Plugins
                         }
 
                         player.Reply(lang.GetMessage("NoPlayerFound", this, player.Id), null, args[1]);
-                        return;
-                    }
-
-                case "checksteam":
-                    {
-                        if (string.IsNullOrEmpty(config.ApiKey))
-                        {
-                            player.Reply(lang.GetMessage("steam_wrongapikey", this, player.Id));
-                            return;
-                        }
-
-                        foreach (BasePlayer p in BasePlayer.activePlayerList) SteamCheck(p.userID, false);
                         return;
                     }
 
@@ -1357,7 +1181,7 @@ namespace Oxide.Plugins
 
                         case -50:
                             {
-                                SendReply(player, "Time: -50d (manually set non-noob or flagged when connecting (steam))");
+                                SendReply(player, "Time: -50d (Unknown)");
                                 break;
                             }
 
@@ -1489,29 +1313,22 @@ namespace Oxide.Plugins
             }
         }
 
-        [ChatCommand("removenoob")]
-        private void RemoveManualCmd(BasePlayer player, string command, string[] args)
-        {
-            if (args.Length < 1)
-            {
-                SendReply(player, lang.GetMessage("rn_manual", this, player.UserIDString));
-                return;
-            }
-
-            if (args[0].ToLower() == "yes")
-            {
-                if (storedData.players.ContainsKey(player.userID))
-                {
-                    storedData.players[player.userID] = -50d;
-                    SendReply(player, lang.GetMessage("rn_success", this, player.UserIDString));
-                    return;
-                }
-
-                LogToFile(this.Name, "Didn't find any info for player " + player.userID + " when manually removing??", this, true);
-                storedData.players.Add(player.userID, -50d);
-                SendReply(player, lang.GetMessage("rn_success", this, player.UserIDString));
-            }
-        }
         #endregion
     }
 }
+
+
+//  Copyright (C) <2021>  <Slydelix & RustySpoon>
+//
+//  This program is free software: you can redistribute it and/or modify
+//  it under the terms of the GNU General Public License as published by
+//  the Free Software Foundation, either version 3 of the License, or
+//  (at your option) any later version.
+//
+//  This program is distributed in the hope that it will be useful,
+//  but WITHOUT ANY WARRANTY; without even the implied warranty of
+//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//  GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License
+//  along with this program.  If not, see <https://www.gnu.org/licenses/>.
