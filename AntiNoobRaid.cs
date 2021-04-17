@@ -10,7 +10,7 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "Slydelix & RustySpoon", "1.8.6", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "Slydelix & RustySpoon", "1.8.7", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, GameTipAPI, Clans;
@@ -56,6 +56,8 @@ namespace Oxide.Plugins
             public bool KillFire;
             [JsonProperty("List of entities that can be destroyed even if owner is a noob, true = destroyable everywhere (not inside of owners TC range)")]
             public Dictionary<string, bool> AllowedEntities = PlaceHolderDictionary;
+            [JsonProperty("Player Data")]
+            public bool playerdata;
             [JsonProperty("Notify player on first connection with protection time")]
             public bool MessageOnFirstConnection;
             [JsonProperty("Prevent new players from raiding")]
@@ -306,6 +308,18 @@ namespace Oxide.Plugins
             foreach (var entry in storedData.players.Where(x => !storedData.lastConnection.ContainsKey(x.Key)))
                 storedData.lastConnection.Add(entry.Key, string.Empty);
 
+            if (!config.playerdata)
+            {
+                StartChecking();
+                CheckPlayersWithNoInfo();
+            }
+
+            timer.Every(60f, RefreshClanCache);
+
+            if (config.playerdata)
+                foreach (var p in BasePlayer.activePlayerList.Where(x => !storedData.players.ContainsKey(x.userID)))
+                    storedData.players.Add(p.userID, -50d);
+
             if (PlaytimeTracker == null)
             {
                 PrintWarning(lang.GetMessage("pt_notInstalled_first", this, null));
@@ -400,6 +414,16 @@ namespace Oxide.Plugins
                 }
             }
 
+//                                                           I kinda forgot why this check is needed :/
+            if (config.RemoveTeamProtection && !string.IsNullOrEmpty(hitinfo?.WeaponPrefab?.ShortPrefabName))
+            {
+                if (attacker.currentTeam != 0)
+                {
+                    var team = RelationshipManager.Instance?.teams[attacker.currentTeam];
+//                  foreach (var member in team.members) storedData.players[member] = -50d;
+                }
+            }
+
             if (config.RemoveClanProtection && !string.IsNullOrEmpty(hitinfo?.WeaponPrefab?.ShortPrefabName))
             {
                 string val;
@@ -445,7 +469,7 @@ namespace Oxide.Plugins
                 hitinfo.damageTypes = new DamageTypeList();
                 hitinfo.DoHitEffects = false;
                 hitinfo.HitMaterial = 0;
-                
+
                 NextTick(() => {
                     //if player was *manually* set to noob we don't remove his protection on raid attempt
                     if (config.UnNoobNew)
@@ -462,7 +486,7 @@ namespace Oxide.Plugins
                     Refund(attacker, name, entity);
                 });
                 return true;
-            }          
+            }
 
             if (PlayerIsNew(owner))
             {
@@ -484,7 +508,7 @@ namespace Oxide.Plugins
             if (hitinfo == null || fireball == null || entity == null || !config.KillFire) return;
 
             if (!(entity is BuildingBlock || entity is Door || entity.OwnerID != 0u || entity.PrefabName.Contains("deployable")) || fireball.IsDestroyed) return;
-            
+
             if (config.AllowTwigDestruction && ((entity as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs)) return;
 
             if (config.AllowedEntities.ContainsKey(entity.ShortPrefabName))
