@@ -44,13 +44,13 @@ antinoobraid.noob - gives player permanent noob protection status
 
 (/) antinoob addnoob [SteamID] - makes the player noob (use this in case you notice player is really... noob...)
 
-### Entity Whitelist
+## Entity Whitelist
 
 In config file there are already 5 placeholder for entity whitelist, to add an entity to the list you need to replace the Placeholder with the short prefab of the entity you want to whitelist, you can find that by typing debug.lookingat in client console ("Ent: sleepingbag_leather_deployed").
 
 If you want to make the entity destroyable everywhere around the world you set the true/false property to true and if you want the entity to be destroyable when it's outside of TC range and owner of entity is not authorized to the TC set it to false.
 
-### Configuration
+## Configuration
 
 ```bash
 The settings and options can be configured in the AntiNoobRaid file under the config directory. 
