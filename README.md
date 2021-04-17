@@ -92,7 +92,7 @@ The use of a JSON editor or validation site such as jsonlint.com is recommended 
 ## Notes
 For infinite refunding set the "Refunds before player starts losing explosives to zero.
 
-###### **WARNING: Raidable Bases Conflicts With AntiNoobRaid**
+WARNING: Raidable Bases Conflicts With AntiNoobRaid
 
 ## API
 # IgnorePlayer 
@@ -117,3 +117,6 @@ Example: `AntiNoobRaid.Call("UnIgnorePlayer", "71661298069130333");`
 Returns true if user was successfully removed from ignore list and false if not
 
 Accepts: BasePlayer, ulong & string
+
+
+## WARNING: Raidable Bases Conflicts With AntiNoobRaid
