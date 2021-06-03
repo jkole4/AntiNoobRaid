@@ -10,7 +10,7 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "Slydelix & RustySpoon", "1.8.7", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "Slydelix & RustySpoon", "1.8.8", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, GameTipAPI, Clans;
@@ -31,6 +31,10 @@ namespace Oxide.Plugins
             {"surveycharge", "survey_charge.deployed"},
             {"explosive.satchel", "explosive.satchel.deployed"},
             {"grenade.beancan", "grenade.beancan.deployed"},
+            {"ammo.rifle.explosive", "riflebullet_explosive"},
+            {"ammo.shotgun.fire", "shotgunbullet_fire"},
+            {"ammo.pistol.fire", "pistolbullet_fire"},
+            {"ammo.rifle.incendiary", "riflebullet_fire"},
             {"grenade.f1", "grenade.f1.deployed"}
         };
 
@@ -98,7 +102,7 @@ namespace Oxide.Plugins
 
             public static readonly ConfigFile DefaultConfigFile = new ConfigFile
             {
-                UnNoobManual = false,
+                UnNoobManual = true,
                 ProtectionTime = 43200,
                 Frequency = 30,
                 RefundTimes = 4,
@@ -115,10 +119,10 @@ namespace Oxide.Plugins
                 ShowMessage = true,
                 ShowTime = false,
                 PreventNew = true,
-                UnNoobNew = false,
+                UnNoobNew = true,
                 AllowedEntities = PlaceHolderDictionary,
                 CheckTeamForOwner = true,
-                RemoveTeamProtection = false,
+                RemoveTeamProtection = true,
                 //AutoAddProtection = true,
                 //AutoMinutes = 60
             };
@@ -401,7 +405,7 @@ namespace Oxide.Plugins
 
             if (config.CheckTeamForOwner)
             {
-                var instance = RelationshipManager.Instance;
+                var instance = RelationshipManager.ServerInstance;
                 if (instance == null) PrintWarning("RelationshipManager instance is null! how is this even possible?");
 
                 else
@@ -419,7 +423,7 @@ namespace Oxide.Plugins
             {
                 if (attacker.currentTeam != 0)
                 {
-                    var team = RelationshipManager.Instance?.teams[attacker.currentTeam];
+                    var team = RelationshipManager.ServerInstance?.teams[attacker.currentTeam];
 //                  foreach (var member in team.members) storedData.players[member] = -50d;
                 }
             }
