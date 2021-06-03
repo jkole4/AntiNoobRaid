@@ -10,7 +10,7 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "Slydelix & RustySpoon", "1.8.8", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "Slydelix & RustySpoon", "1.8.7", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, GameTipAPI, Clans;
@@ -31,10 +31,6 @@ namespace Oxide.Plugins
             {"surveycharge", "survey_charge.deployed"},
             {"explosive.satchel", "explosive.satchel.deployed"},
             {"grenade.beancan", "grenade.beancan.deployed"},
-            {"ammo.rifle.explosive", "riflebullet_explosive"},
-            {"ammo.shotgun.fire", "shotgunbullet_fire"},
-            {"ammo.pistol.fire", "pistolbullet_fire"},
-            {"ammo.rifle.incendiary", "riflebullet_fire"},
             {"grenade.f1", "grenade.f1.deployed"}
         };
 
@@ -102,7 +98,7 @@ namespace Oxide.Plugins
 
             public static readonly ConfigFile DefaultConfigFile = new ConfigFile
             {
-                UnNoobManual = true,
+                UnNoobManual = false,
                 ProtectionTime = 43200,
                 Frequency = 30,
                 RefundTimes = 4,
@@ -119,10 +115,10 @@ namespace Oxide.Plugins
                 ShowMessage = true,
                 ShowTime = false,
                 PreventNew = true,
-                UnNoobNew = true,
+                UnNoobNew = false,
                 AllowedEntities = PlaceHolderDictionary,
                 CheckTeamForOwner = true,
-                RemoveTeamProtection = true,
+                RemoveTeamProtection = false,
                 //AutoAddProtection = true,
                 //AutoMinutes = 60
             };
