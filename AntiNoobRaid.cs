@@ -401,7 +401,7 @@ namespace Oxide.Plugins
 
             if (config.CheckTeamForOwner)
             {
-                var instance = RelationshipManager.ServerInstance;
+                var instance = RelationshipManager.Instance;
                 if (instance == null) PrintWarning("RelationshipManager instance is null! how is this even possible?");
 
                 else
@@ -419,7 +419,7 @@ namespace Oxide.Plugins
             {
                 if (attacker.currentTeam != 0)
                 {
-                    var team = RelationshipManager.ServerInstance?.teams[attacker.currentTeam];
+                    var team = RelationshipManager.Instance?.teams[attacker.currentTeam];
 //                  foreach (var member in team.members) storedData.players[member] = -50d;
                 }
             }
