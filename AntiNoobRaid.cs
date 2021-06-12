@@ -10,7 +10,7 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "Slydelix & RustySpoon", "1.8.8", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "Slydelix & RustySpoon", "1.8.9", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, GameTipAPI, Clans;
@@ -345,7 +345,7 @@ namespace Oxide.Plugins
             var dmgType = hitinfo?.damageTypes?.GetMajorityDamageType() ?? DamageType.Generic;
             if (dmgType == DamageType.Decay || dmgType == DamageType.Generic) return null;
 
-            if (!(entity is BuildingBlock || entity is Door || entity.OwnerID != 0u || entity.PrefabName.Contains("deployable"))) return null;
+            if (entity.OwnerID == 0u || !(entity is BuildingBlock || entity is Door || entity.PrefabName.Contains("deployable"))) return null;
 
             if (config.AllowTwigDestruction && ((entity as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs)) return null;
 
@@ -646,6 +646,7 @@ namespace Oxide.Plugins
 
         private void APICall(ulong ID, bool secondattempt = false)
         {
+            if (!ID.IsSteamId()) return;
             if (PlaytimeTracker == null)
             {
                 Puts(lang.GetMessage("pt_notInstalled", this, null));
@@ -669,7 +670,7 @@ namespace Oxide.Plugins
             {
                 if (secondattempt) storedData.playersWithNoData.Add(ID);
 
-                Puts(lang.GetMessage("userinfo_nofound", this, null));
+                Puts(lang.GetMessage("userinfo_nofound", this, null), ID);
                 return;
             }
 
@@ -1359,4 +1360,4 @@ namespace Oxide.Plugins
 //  GNU General Public License for more details.
 //
 //  You should have received a copy of the GNU General Public License
-//  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//  along with this program.  If not, see <https://www.gnu.org/licenses></https:>.
