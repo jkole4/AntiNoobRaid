@@ -10,7 +10,7 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "Slydelix & RustySpoon", "1.8.9", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "Slydelix & RustySpoon", "1.9.0", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, GameTipAPI, Clans;
@@ -20,6 +20,7 @@ namespace Oxide.Plugins
 
         private List<BasePlayer> cooldown = new List<BasePlayer>();
         private List<BasePlayer> MessageCooldown = new List<BasePlayer>();
+        private List<BuildingBlock> _blocks = new List<BuildingBlock>();
 
         //private Dictionary<ulong, Timer> RaidTimerDictionary = new Dictionary<ulong, Timer>();
         private Dictionary<string, string> raidtools = new Dictionary<string, string>
@@ -296,6 +297,9 @@ namespace Oxide.Plugins
             storedData = Interface.Oxide.DataFileSystem.ReadObject<StoredData>(this.Name);
             config = Config.ReadObject<ConfigFile>();
             NextTick(() => Config.WriteObject(config));
+            Unsubscribe(nameof(OnEntityDeath));
+            Unsubscribe(nameof(OnEntityKill));
+            Unsubscribe(nameof(OnEntitySpawned));
             //if (config.AutoMinutes <= 0 && config.AutoAddProtection) PrintError("Time (minutes) after which the raided person gains raid protection is set to 0!!! Change this!!");
         }
 
@@ -305,8 +309,14 @@ namespace Oxide.Plugins
                 AddCovalenceCommand(command.Key, command.Value, AdminPerm);
         }
 
-        private void Loaded()
+        private void OnServerInitialized(bool isStartup) // Reminder use this hook instead of Loaded(). Thanks Nivex
         {
+            foreach (var block in BaseEntity.saveList.OfType<BuildingBlock>()) _blocks.Add(block);
+
+            Subscribe(nameof(OnEntityDeath));
+            Subscribe(nameof(OnEntityKill));
+            Subscribe(nameof(OnEntitySpawned));
+
             RegisterCommands();
 
             foreach (var entry in storedData.players.Where(x => !storedData.lastConnection.ContainsKey(x.Key)))
@@ -337,7 +347,7 @@ namespace Oxide.Plugins
                 });
             }
         }
-
+        
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitinfo)
         {
             if (hitinfo == null || entity == null) return null;
@@ -543,6 +553,12 @@ namespace Oxide.Plugins
         }
 
         private void OnPlayerDisconnected(BasePlayer player, string reason) => LastConnect(player.userID);
+
+        private void OnEntitySpawned(BuildingBlock block) => _blocks.Add(block);
+
+        private void OnEntityDeath(BuildingBlock block, HitInfo hitInfo) => _blocks.Remove(block);
+
+        private void OnEntityKill(BuildingBlock block) => _blocks.Remove(block);
 
         private void OnServerSave()
         {
@@ -792,33 +808,31 @@ namespace Oxide.Plugins
 
             SendReply(player, msg);
         }
-
+ 
         private ulong FullOwner(BaseEntity ent, BasePlayer p = null)
         {
             if (ent == null) return 0u;
 
-            var block = ent.GetComponent<BuildingBlock>();
+            var block = ent as BuildingBlock;
             if (block == null) return ent.OwnerID;
 
             var cached = BuildingInfo.GetByBuildingID(block.buildingID);
             if (cached != null)
                 if (cached.GetCacheAge() < 180 && cached.GetCacheAge() != -1) return cached.OwnerID;
 
-            var ents = BaseEntity.saveList.Where(x => x.GetComponent<BuildingBlock>()?.buildingID == block.buildingID).ToList();
-            var backup = ents.ToList();
+            var ownership = new Dictionary<ulong, int>();
 
-            if (config.IgnoreTwig) ents.RemoveAll(x => (x as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs);
+            _blocks.RemoveAll(x => x == null || x.IsDestroyed || x.OwnerID == 0u);
 
-            if (ents.Count == 0) ents = backup.ToList();
-
-            Dictionary<ulong, int> ownership = new Dictionary<ulong, int>();
-
-            foreach (var e in ents)
+            foreach (var x in _blocks) // no more expensive LINQ
             {
-                if (e.OwnerID == 0u) continue;
-                var val = 0;
-                if (!ownership.TryGetValue(e.OwnerID, out val)) ownership[e.OwnerID] = 1;
-                else ownership[e.OwnerID]++;
+                if (x.buildingID != block.buildingID || config.IgnoreTwig && x.grade == BuildingGrade.Enum.Twigs)
+                {
+                    continue;
+                }
+
+                if (!ownership.ContainsKey(x.OwnerID)) ownership[x.OwnerID] = 1;
+                else ownership[x.OwnerID]++;
             }
 
             if (ownership.Count == 0)
