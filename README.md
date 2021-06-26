@@ -92,8 +92,7 @@ The use of a JSON editor or validation site such as jsonlint.com is recommended 
 ## Notes
 For infinite refunding set the "Refunds before player starts losing explosives to zero.
 
-WARNING: Raidable Bases Conflicts With AntiNoobRaid
-
+For `"Refund explosives"` to work you need to set `"Remove noob status of a raider on raid attempt"` to false
 ## API
 # IgnorePlayer 
 
