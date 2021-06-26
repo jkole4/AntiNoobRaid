@@ -10,7 +10,7 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "Slydelix & RustySpoon", "1.9.0", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "Slydelix & RustySpoon", "1.9.1", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, GameTipAPI, Clans;
@@ -61,7 +61,7 @@ namespace Oxide.Plugins
             public bool KillFire;
             [JsonProperty("List of entities that can be destroyed even if owner is a noob, true = destroyable everywhere (not inside of owners TC range)")]
             public Dictionary<string, bool> AllowedEntities = PlaceHolderDictionary;
-            [JsonProperty("Player Data")]
+            [JsonProperty("Player Data (leave it false. if you change it you will tell the plugin to not save player data)")]
             public bool playerdata;
             [JsonProperty("Notify player on first connection with protection time")]
             public bool MessageOnFirstConnection;
@@ -124,6 +124,7 @@ namespace Oxide.Plugins
                 AllowedEntities = PlaceHolderDictionary,
                 CheckTeamForOwner = true,
                 RemoveTeamProtection = true,
+                playerdata = false,
                 //AutoAddProtection = true,
                 //AutoMinutes = 60
             };
@@ -785,7 +786,7 @@ namespace Oxide.Plugins
             });
         }
 
-        private void FirstMessage(BasePlayer player)
+        private void OnPlayerConnected(BasePlayer player)
         {
             if (!config.MessageOnFirstConnection || storedData.FirstMessaged.Contains(player.userID)) return;
             storedData.FirstMessaged.Add(player.userID);
@@ -795,18 +796,23 @@ namespace Oxide.Plugins
 
             string msg = string.Format(lang.GetMessage("firstconnectionmessage", this, player.UserIDString), (config.ProtectionTime / 3600d));
 
-            if (config.UseGT && GameTipAPI != null)
+            if (config.UseGT)
             {
-                GameTipAPI?.Call("ShowGameTip", player, msg, 10f, true);
+                if (config.UseGT && GameTipAPI != null)
+                {
+                    GameTipAPI?.Call("ShowGameTip", player, msg, 10f, true);
+                }
+                else
+                {
+                    player.SendConsoleCommand("gametip.showgametip", msg);
+                    timer.Once(10f, () => player.SendConsoleCommand("gametip.hidegametip"));
+                }
             }
-
             else
             {
-                player.SendConsoleCommand("gametip.showgametip", msg);
-                timer.Once(10f, () => player.SendConsoleCommand("gametip.hidegametip"));
+                SendReply(player, msg);
             }
 
-            SendReply(player, msg);
         }
  
         private ulong FullOwner(BaseEntity ent, BasePlayer p = null)
