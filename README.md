@@ -59,34 +59,37 @@ The use of a JSON editor or validation site such as jsonlint.com is recommended 
 
 ```json
 {
-	"Allow clan members to destroy each others entities": true,
-	"Allow twig to be destroyed even when owner is noob": false,
-	"Check full ownership of the base instead of only one block": true,
-	"Days of inactivity after which player will be raidable": 3.0,
-	"Ignore twig when calculating base ownership (prevents exploiting)": true,
-	"Kill fireballs when someone tries to raid protected player with fire (prevents lag)": true,
-	"List of entities that can be destroyed even if owner is a noob, true = destroyable everywhere (not inside of owners TC range)": {
-		"Placeholder1": true,
-		"Placeholder2": true,
-		"Placeholder3": true,
-		"Placeholder4": true,
-		"Placeholder5": true
-	},
-	"Notify player on first connection with protection time": true,
-	"Prevent new players from raiding": true,
-	"Refund explosives": true,
-	"Refunds before player starts losing explosives": 4,
-	"Remove noob status of a raider on raid attempt": false,
-	"Remove noob status of a raider who is manually marked as a noob on raid attempt": false,
-	"Remove protection from all clan members when a member tries to raid": false,
-	"Show message for not being able to raid": true,
-	"Show time until raidable": false,
-	"Time (seconds) after which noob will lose protection (in-game time)": 43200,
-	"Use game tips to send first connection message to players": true,
-	"User data refresh interval (seconds)": 30,
-	"Allow team members to destroy each others entities": true,
-	"Remove protection from all team members when a member tries to raid": false
+  "Allow clan members to destroy each others entities (Rust:IO Clans)": true,
+  "Allow team members to destroy each others entities": true,
+  "Allow twig to be destroyed even when owner is noob": false,
+  "Ignore twig when calculating base ownership (prevents exploiting)": true,
+  "Check full ownership of the base instead of only one block": true,
+  "Kill fireballs when someone tries to raid protected player with fire (prevents lag)": true,
+  "Time (seconds) after which noob will lose protection (in-game time)": 43200,
+  "Days of inactivity after which player will be raidable": 3.0,
+  "Notify player on first connection with protection time": true,
+  "Use game tips to send first connection message to players": true,
+  "Show message for not being able to raid": true,
+  "Show time until raidable": false,
+  "Prevent new players from raiding": true,
+  "Remove protection from all team members when a member tries to raid": true,
+  "Remove protection from all clan members when a member tries to raid": false,
+  "Remove noob status of a raider on raid attempt": true,
+  "Remove noob status of a raider who is manually marked as a noob on raid attempt": true,
+  "Refund explosives": true,
+  "Refunds before player starts losing explosives": 4,
+  "List of entities that can be destroyed even if owner is a noob, true = destroyable everywhere (not inside of owners TC range)": {
+    "Placeholder1": true,
+    "Placeholder2": true,
+    "Placeholder3": true,
+    "Placeholder4": true,
+    "Placeholder5": true
+  },
+  "User data refresh interval (seconds)": 30,
+  "Show structure has no owner in console": false,
+  "Enable Logs (logs can be found in /oxide/logs/antinoobraid)": true
 }
+
 ```
 
 ## Notes
