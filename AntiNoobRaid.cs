@@ -21,7 +21,7 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "RustySpoon342", "1.9.2", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "RustySpoon342", "1.9.3", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, GameTipAPI, Clans;
@@ -63,6 +63,8 @@ namespace Oxide.Plugins
             public bool CheckClanForOwner;
             [JsonProperty("Allow team members to destroy each others entities")]
             public bool CheckTeamForOwner;
+            [JsonProperty("Allow Patrol Helicopter to damage noob structures (This will allow players to raid with Patrol Helicopter)")]
+            public bool PatrolHeliDamage;
             [JsonProperty("Allow twig to be destroyed even when owner is noob")]
             public bool AllowTwigDestruction;
             [JsonProperty("Ignore twig when calculating base ownership (prevents exploiting)")]
@@ -76,8 +78,6 @@ namespace Oxide.Plugins
             public int ProtectionTime;
             [JsonProperty("Days of inactivity after which player will be raidable")]
             public double InactivityRemove;
-
-
 
             [JsonProperty("Notify player on first connection with protection time")]
             public bool MessageOnFirstConnection;
@@ -123,6 +123,7 @@ namespace Oxide.Plugins
                 ProtectionTime = 43200,
                 Frequency = 30,
                 RefundTimes = 4,
+                PatrolHeliDamage = true,
                 InactivityRemove = 3,
                 CheckFullOwnership = true,
                 CheckClanForOwner = true,
@@ -371,19 +372,19 @@ namespace Oxide.Plugins
             }
         }
 
-        private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitinfo, BasePlayer player)
+        private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitinfo)
         {
             var owner = config.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
             BasePlayer attacker = hitinfo.InitiatorPlayer;
             string name = hitinfo?.WeaponPrefab?.ShortPrefabName ?? string.Empty;
+            var dmgType = hitinfo?.damageTypes?.GetMajorityDamageType() ?? DamageType.Generic;
 
             if (entity == null || hitinfo == null) return null; //null checks
 
-            var dmgType = hitinfo?.damageTypes?.GetMajorityDamageType() ?? DamageType.Generic;
             if (dmgType == DamageType.Decay || dmgType == DamageType.Generic) return null;
 
             if (entity.OwnerID == 0u || !(entity is BuildingBlock || entity is Door || entity.PrefabName.Contains("deployable"))) return null;
-
+            
             if (config.AllowTwigDestruction && ((entity as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs)) return null;
 
             if (config.RemoveClanProtection && !string.IsNullOrEmpty(hitinfo?.WeaponPrefab?.ShortPrefabName))
@@ -419,9 +420,42 @@ namespace Oxide.Plugins
                 if (!entity.GetBuildingPrivilege().authorizedPlayers.Select(x => x.userid).Contains(entity.OwnerID)) return null;
             }
 
+            // Patrol Helicopter
+            if (attacker == null && dmgType == DamageType.Bullet || name == "rocket_heli_napalm" || name == "rocket_heli")
+            {
+                if (config.PatrolHeliDamage)
+                {
+                    hitinfo.HitMaterial = 1;
+                    hitinfo.damageTypes.ScaleAll(1f);
+                    if (debug)
+                    {
+                        var msg = "Allow Patrol Helicopter to damage noob structures set true";
+                        Puts(msg);
+                    }
+                    return null;
+                }
+                else if (!config.PatrolHeliDamage)
+                {
+
+                    if (PlayerIsNew(owner))
+                    {
+                        hitinfo.damageTypes = new DamageTypeList();
+                        hitinfo.DoHitEffects = false;
+                        hitinfo.HitMaterial = 0;
+                        hitinfo.damageTypes.ScaleAll(0f);
+                        if (debug)
+                        {
+                            var msg = "Trying To Nullify Damage of BaseHelicopter";
+                            Puts(msg);
+                        }
+                        return true;
+                    }
+                }
+            }
+
             // MLRS Damage Fix to Noob Structures
-            if (attacker == null)
-            
+            if (attacker == null && name == "rocket_mlrs")
+
             {
                 if (PlayerIsNew(owner))
                 {
@@ -548,7 +582,7 @@ namespace Oxide.Plugins
                 hitinfo.damageTypes.ScaleAll(0f);
                 if (debug)
                 {
-                    var msg = $"Trying To Nullify Damage";
+                    var msg = $"Trying To Nullify Damage {name}";
                     Puts(msg);
                 } 
                 NextTick(() => {
@@ -562,8 +596,9 @@ namespace Oxide.Plugins
                 });
                 return true;
             }
-
+           
             return null;
+
         }
 
         private void OnFireBallDamage(FireBall fireball, BaseCombatEntity entity, HitInfo hitinfo)
