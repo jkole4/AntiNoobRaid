@@ -61,6 +61,7 @@ The use of a JSON editor or validation site such as jsonlint.com is recommended 
 {
   "Allow clan members to destroy each others entities (Rust:IO Clans)": true,
   "Allow team members to destroy each others entities": true,
+  "Allow Patrol Helicopter to damage noob structures (This will allow players to raid with Patrol Helicopter)": true,
   "Allow twig to be destroyed even when owner is noob": false,
   "Ignore twig when calculating base ownership (prevents exploiting)": true,
   "Check full ownership of the base instead of only one block": true,
