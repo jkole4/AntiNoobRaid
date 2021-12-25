@@ -185,7 +185,6 @@ namespace Oxide.Plugins
                 {"console_lostnoobstatus", "{0} hasn't connected for {1} days so he lost his noob status (can be raided)"},
                 {"console_notenough", "{0} doesn't have enough hours in game to be marked as a non-noob"},
 
-
                 {"firstconnectionmessage", "You are a new player so your buildings are protected for first {0} hours of your time on server"},
 
                 {"pt_notInstalled_first", "Playtime Tracker is not installed, will check again in 30 seconds"},
