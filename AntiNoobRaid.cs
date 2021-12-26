@@ -21,7 +21,7 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "RustySpoon342", "1.9.3", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "RustySpoon342", "1.9.4", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, GameTipAPI, Clans;
@@ -185,6 +185,7 @@ namespace Oxide.Plugins
                 {"console_lostnoobstatus", "{0} hasn't connected for {1} days so he lost his noob status (can be raided)"},
                 {"console_notenough", "{0} doesn't have enough hours in game to be marked as a non-noob"},
 
+
                 {"firstconnectionmessage", "You are a new player so your buildings are protected for first {0} hours of your time on server"},
 
                 {"pt_notInstalled_first", "Playtime Tracker is not installed, will check again in 30 seconds"},
@@ -330,6 +331,7 @@ namespace Oxide.Plugins
             Unsubscribe(nameof(OnEntityDeath));
             Unsubscribe(nameof(OnEntityKill));
             Unsubscribe(nameof(OnEntitySpawned));
+            Unsubscribe(nameof(OnEntityTakeDamage));
             //if (config.AutoMinutes <= 0 && config.AutoAddProtection) PrintError("Time (minutes) after which the raided person gains raid protection is set to 0!!! Change this!!");
         }
 
@@ -346,6 +348,7 @@ namespace Oxide.Plugins
             Subscribe(nameof(OnEntityDeath));
             Subscribe(nameof(OnEntityKill));
             Subscribe(nameof(OnEntitySpawned));
+            Subscribe(nameof(OnEntityTakeDamage));
 
             RegisterCommands();
 
@@ -450,6 +453,9 @@ namespace Oxide.Plugins
                         return true;
                     }
                 }
+
+                return null;
+
             }
 
             // MLRS Damage Fix to Noob Structures
@@ -469,6 +475,9 @@ namespace Oxide.Plugins
                     }
                     return true;
                 }
+
+                return null;
+
             }
 
             if (config.RemoveTeamProtection && !string.IsNullOrEmpty(hitinfo?.WeaponPrefab?.ShortPrefabName))
