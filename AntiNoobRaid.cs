@@ -377,50 +377,11 @@ namespace Oxide.Plugins
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitinfo)
         {
             var owner = config.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
-            BasePlayer attacker = hitinfo.InitiatorPlayer;
             string name = hitinfo?.WeaponPrefab?.ShortPrefabName ?? string.Empty;
+            BasePlayer attacker = hitinfo.InitiatorPlayer;
             var dmgType = hitinfo?.damageTypes?.GetMajorityDamageType() ?? DamageType.Generic;
 
-            if (entity == null || hitinfo == null) return null; //null checks
-
-            if (dmgType == DamageType.Decay || dmgType == DamageType.Generic) return null;
-
-            if (entity.OwnerID == 0u || !(entity is BuildingBlock || entity is Door || entity.PrefabName.Contains("deployable"))) return null;
-            
-            if (config.AllowTwigDestruction && ((entity as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs)) return null;
-
-            if (config.RemoveClanProtection && !string.IsNullOrEmpty(hitinfo?.WeaponPrefab?.ShortPrefabName))
-            {
-                string val;
-                if (raidtools.TryGetValue(hitinfo?.WeaponPrefab?.ShortPrefabName, out val))
-                    RemoveClanP(attacker?.userID ?? 0u);
-            }
-
-            if (config.CheckClanForOwner)
-             {
-                 ulong userID = attacker?.userID ?? 0u;
-                 var clan = ClanInfo.GetClanOf(userID) ?? null;
-                 if (clan == null)
-                 {
-                     var clanName = Clans?.Call<string>("GetClanOf", userID) ?? string.Empty;
-                     if (!string.IsNullOrEmpty(clanName))
-                     {
-                         var members = GetClanMembers(clanName);
-                         var claninfo = new ClanInfo { clanName = clanName, members = members };
-                         ClanInfo.clanCache.Add(claninfo);
-
-                         if (claninfo.members.Contains(owner)) return null;
-                     }
-                 }
-
-                 else if (clan.members.Contains(owner)) return null;
-             }
-            
-            if (config.AllowedEntities.ContainsKey(entity.ShortPrefabName))
-            {
-                if (config.AllowedEntities[entity.ShortPrefabName] || entity.GetBuildingPrivilege() == null) return null;
-                if (!entity.GetBuildingPrivilege().authorizedPlayers.Select(x => x.userid).Contains(entity.OwnerID)) return null;
-            }
+            if (hitinfo == null || entity == null) return null; //null checks
 
             // Patrol Helicopter
             if (attacker == null && dmgType == DamageType.Bullet || name == "rocket_heli_napalm" || name == "rocket_heli")
@@ -480,21 +441,44 @@ namespace Oxide.Plugins
 
             }
 
-            if (config.RemoveTeamProtection && !string.IsNullOrEmpty(hitinfo?.WeaponPrefab?.ShortPrefabName))
+            if (dmgType == DamageType.Decay || dmgType == DamageType.Generic) return null;
+
+            if (entity.OwnerID == 0u || !(entity is BuildingBlock || entity is Door || entity.PrefabName.Contains("deployable") || entity.PrefabName.Contains("turret"))) return null;
+            
+            if (config.AllowTwigDestruction && ((entity as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs)) return null;
+
+            if (config.AllowedEntities.ContainsKey(entity.ShortPrefabName))
             {
-                if (attacker.currentTeam != 0)
+                if (config.AllowedEntities[entity.ShortPrefabName] || entity.GetBuildingPrivilege() == null) return null;
+                if (!entity.GetBuildingPrivilege().authorizedPlayers.Select(x => x.userid).Contains(entity.OwnerID)) return null;
+            }
+
+            if (attacker == null || entity?.OwnerID == attacker?.userID) return null;
+
+            if (storedData.IgnoredPlayers.Contains(attacker.userID)) return null;
+
+            if (owner == 0u) return null;
+
+            if (owner == attacker?.userID) return null;
+
+            if (config.CheckClanForOwner)
+            {
+                ulong userID = attacker?.userID ?? 0u;
+                var clan = ClanInfo.GetClanOf(userID) ?? null;
+                if (clan == null)
                 {
-                    if (storedData.players[attacker.userID] >= 0)
+                    var clanName = Clans?.Call<string>("GetClanOf", userID) ?? string.Empty;
+                    if (!string.IsNullOrEmpty(clanName))
                     {
-                        SendReply(attacker, lang.GetMessage("lost_teamsprotection", this, attacker.UserIDString));
-                        MessagePlayer(attacker, owner);
-                        if (config.EnableLogging) LogToFile($"TeamLostNoob", $"[{DateTime.Now}] - {attacker} lost their team noob status.", this, false);
+                        var members = GetClanMembers(clanName);
+                        var claninfo = new ClanInfo { clanName = clanName, members = members };
+                        ClanInfo.clanCache.Add(claninfo);
 
+                        if (claninfo.members.Contains(owner)) return null;
                     }
-
-                    var team = RelationshipManager.ServerInstance?.teams[attacker.currentTeam];
-                    foreach (var member in team.members) storedData.players[member] = -50d;
                 }
+
+                else if (clan.members.Contains(owner)) return null;
             }
 
             if (config.CheckTeamForOwner)
@@ -512,12 +496,29 @@ namespace Oxide.Plugins
                 }
             }
 
-            if (attacker == null || entity?.OwnerID == attacker?.userID) return null;
-            if (storedData.IgnoredPlayers.Contains(attacker.userID)) return null;
+            if (config.RemoveTeamProtection && !string.IsNullOrEmpty(hitinfo?.WeaponPrefab?.ShortPrefabName))
+            {
+                if (attacker.currentTeam != 0)
+                {
+                    if (storedData.players[attacker.userID] >= 0)
+                    {
+                        SendReply(attacker, lang.GetMessage("lost_teamsprotection", this, attacker.UserIDString));
+                        MessagePlayer(attacker, owner);
+                        if (config.EnableLogging) LogToFile($"TeamLostNoob", $"[{DateTime.Now}] - {attacker} lost their team noob status.", this, false);
 
-            if (owner == 0u) return null;
+                    }
 
-            if (owner == attacker?.userID) return null;
+                    var team = RelationshipManager.ServerInstance?.teams[attacker.currentTeam];
+                    foreach (var member in team.members) storedData.players[member] = -50d;
+                }
+            }
+
+            if (config.RemoveClanProtection && !string.IsNullOrEmpty(hitinfo?.WeaponPrefab?.ShortPrefabName))
+            {
+                string val;
+                if (raidtools.TryGetValue(hitinfo?.WeaponPrefab?.ShortPrefabName, out val))
+                    RemoveClanP(attacker?.userID ?? 0u);
+            }
 
             bool wipe = false;
             try
