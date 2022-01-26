@@ -65,7 +65,7 @@ If using `"Anti Ladder and Twig"` you can disable `"Ignore twig when calculating
  
  `"List of entities that can be destroyed without losing noob prtection, true = destroyable everywhere"` This option was added so noobs can destroy Certian Items if desired without losing protection. Best to add Storage Containers here As it will allow noobs to destory boxes in Decaying Bases but wont allow other player's to destroy theres
  
- `"Show time until raidable only to owners"` This Will Allow The Base Owner To Check There Protection Time on Only There Base! Clan/Team member will also be able Too if enabled
+ `"Show time until raidable only to owners"` This will allow the Base Owner to check there protection time on only there base! Clan/Team member will also be able Too if enabled
 
 `"Save data on Server Save"` If disabled it will save every 60 seconds or what is in `"Save interval (seconds)"`
 
