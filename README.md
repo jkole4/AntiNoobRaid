@@ -1,5 +1,5 @@
 # Introduction
-Anti Noob Raid prevents doing damage to entities placed by a new player for a certian amount of time.
+Anti Noob Raid prevents doing damage to entities placed by a new player for a certain amount of time.
 For this plugin to work, Playtime Tracker is needed to monitor how long players are on the server.
 Time period inside which players cannot get raided is configurable in the config file, by default it is 43200 (seconds).
 
@@ -63,7 +63,7 @@ If using `"Anti Ladder and Twig"` you can disable `"Ignore twig when calculating
 
  Fire produced by Explosive Ammo & Incendiary Ammo from Team/Clan members won't damage Team/Clan structures if protected. This is due to the hitinfo.InitiatorPlayer returning nothing with the fire. the Bullet Damage & Explosive Damage will still damage.
  
- `"List of entities that can be destroyed without losing noob prtection, true = destroyable everywhere"` This option was added so noobs can destroy Certian Items if desired without losing protection. Best to add Storage Containers here As it will allow noobs to destory boxes in Decaying Bases but wont allow other player's to destroy theres
+ `"List of entities that can be destroyed without losing noob prtection, true = destroyable everywhere"` This option was added so noobs can destroy Certain Items if desired without losing protection. Best to add Storage Containers here As it will allow noobs to destroy boxes in Decaying Bases but wont allow other player's to destroy there's
  
  `"Show time until raidable only to owners"` This will allow the Base Owner to check there protection time on only there base! Clan/Team member will also be able Too if enabled
 
@@ -111,7 +111,7 @@ The use of a JSON editor or validation site such as jsonlint.com is recommended 
       "beartrap": "Snap Trap",
       "landmine": "Landmine"
     },
-    "List of entities that can be destroyed without losing noob prtection, true = destroyable everywhere": {
+    "List of entities that can be destroyed without losing noob protection, true = destroyable everywhere": {
       "ShortPrefabName": "Common Name",
       "campfire": "Camp Fire"
     }
@@ -150,3 +150,4 @@ Example: `AntiNoobRaid.Call("UnIgnorePlayer", "71661298069130333");`
 Returns true if user was successfully removed from ignore list and false if not
 
 Accepts: BasePlayer, ulong & string
+
