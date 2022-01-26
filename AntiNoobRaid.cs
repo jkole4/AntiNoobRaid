@@ -21,13 +21,14 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "RustySpoon342", "1.9.4", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "MasterSplinter", "2.0.0", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
-        [PluginReference] private Plugin PlaytimeTracker, WipeProtection, GameTipAPI, Clans;
+        [PluginReference] private Plugin PlaytimeTracker, WipeProtection, Clans;
 
         //set this to true if you are having issues with the plugin
         private bool debug = false;
+        private string debugversion = "0.2.9";
 
         private List<BasePlayer> cooldown = new List<BasePlayer>();
         private List<BasePlayer> MessageCooldown = new List<BasePlayer>();
@@ -36,18 +37,23 @@ namespace Oxide.Plugins
         //private Dictionary<ulong, Timer> RaidTimerDictionary = new Dictionary<ulong, Timer>();
         private Dictionary<string, string> raidtools = new Dictionary<string, string>
         {
-            {"ammo.rocket.fire", "rocket_fire"},
-            {"ammo.rocket.hv", "rocket_hv"},
-            {"ammo.rocket.basic", "rocket_basic"},
-            {"explosive.timed", "explosive.timed.deployed"},
-            {"surveycharge", "survey_charge.deployed"},
-            {"explosive.satchel", "explosive.satchel.deployed"},
-            {"grenade.beancan", "grenade.beancan.deployed"},
-            {"ammo.rifle.explosive", "riflebullet_explosive"},
-            {"ammo.shotgun.fire", "shotgunbullet_fire"},
-            {"ammo.pistol.fire", "pistolbullet_fire"},
-            {"ammo.rifle.incendiary", "riflebullet_fire"},
-            {"grenade.f1", "grenade.f1.deployed"},
+            {"ammo.rocket.fire", "rocket_fire" },
+            {"ammo.rocket.hv", "rocket_hv" },
+            {"ammo.rocket.basic", "rocket_basic" },
+            {"explosive.timed", "explosive.timed.deployed" },
+            {"surveycharge", "survey_charge.deployed" },
+            {"explosive.satchel", "explosive.satchel.deployed" },
+            {"grenade.beancan", "grenade.beancan.deployed" },
+            {"grenade.f1", "grenade.f1.deployed" },
+            {"ammo.grenadelauncher.he", "40mm_grenade_he"},
+            {"ammo.rifle", "riflebullet" },
+            {"ammo.rifle.explosive", "riflebullet_explosive" },
+            {"ammo.rifle.incendiary", "riflebullet_fire" },
+            {"ammo.pistol", "pistolbullet" },
+            {"ammo.pistol.fire", "pistolbullet_fire" },
+            {"ammo.shotgun", "shotgunbullet" },
+            {"ammo.shotgun.fire", "shotgunbullet_fire" },
+            {"ammo.shotgun.slug", "shotgunslug" },
             {"ammo.rocket.mlrs", "rocket_mlrs"}
         };
 
@@ -59,91 +65,108 @@ namespace Oxide.Plugins
 
         private class ConfigFile
         {
-            [JsonProperty("Allow clan members to destroy each others entities (Rust:IO Clans)")]
-            public bool CheckClanForOwner;
-            [JsonProperty("Allow team members to destroy each others entities")]
-            public bool CheckTeamForOwner;
-            [JsonProperty("Allow Patrol Helicopter to damage noob structures (This will allow players to raid with Patrol Helicopter)")]
-            public bool PatrolHeliDamage;
-            [JsonProperty("Allow twig to be destroyed even when owner is noob")]
-            public bool AllowTwigDestruction;
-            [JsonProperty("Ignore twig when calculating base ownership (prevents exploiting)")]
-            public bool IgnoreTwig;
-            [JsonProperty("Check full ownership of the base instead of only one block")]
-            public bool CheckFullOwnership;
-            [JsonProperty("Kill fireballs when someone tries to raid protected player with fire (prevents lag)")]
-            public bool KillFire;
+            [JsonProperty(PropertyName = "Main Settings")]
+            public MainSettings Main = new MainSettings();
+            [JsonProperty(PropertyName = "Other Settings")]
+            public OtherSettings Other = new OtherSettings();
+            [JsonProperty(PropertyName = "Team & Clan Settings")]
+            public RelationshipSettings Relationship = new RelationshipSettings();
+            [JsonProperty(PropertyName = "Refund Settings")]
+            public RefundSettings Refund = new RefundSettings();
+            [JsonProperty(PropertyName = "Manage Messages")]
+            public ManageMessages Messages = new ManageMessages();
+            [JsonProperty(PropertyName = "Entity Settings")]
+            public EntitySettings Entity = new EntitySettings();
+            [JsonProperty(PropertyName = "Advance Settings")]
+            public AdvanceSettings Advance = new AdvanceSettings();
 
+            public static readonly ConfigFile DefaultConfigFile = new ConfigFile();
+
+        }
+
+        public class MainSettings
+        {
             [JsonProperty("Time (seconds) after which noob will lose protection (in-game time)")]
-            public int ProtectionTime;
+            public int ProtectionTime = 43200;
             [JsonProperty("Days of inactivity after which player will be raidable")]
-            public double InactivityRemove;
-
-            [JsonProperty("Notify player on first connection with protection time")]
-            public bool MessageOnFirstConnection;
-            [JsonProperty("Use game tips to send first connection message to players")]
-            public bool UseGT;
-            [JsonProperty("Show message for not being able to raid")]
-            public bool ShowMessage;
-            [JsonProperty("Show time until raidable")]
-            public bool ShowTime;
-
-            [JsonProperty("Prevent new players from raiding")]
-            public bool PreventNew;
-            [JsonProperty("Remove protection from all team members when a member tries to raid")]
-            public bool RemoveTeamProtection;
-            [JsonProperty("Remove protection from all clan members when a member tries to raid")]
-            public bool RemoveClanProtection;
+            public double InactivityRemove = 3;
             [JsonProperty("Remove noob status of a raider on raid attempt")]
-            public bool UnNoobNew;
+            public bool UnNoobNew = true;
             [JsonProperty("Remove noob status of a raider who is manually marked as a noob on raid attempt")]
-            public bool UnNoobManual;
+            public bool UnNoobManual = true;
+        }
+
+        public class OtherSettings
+        {
+            [JsonProperty("Allow Patrol Helicopter to damage noob structures (This will allow players to raid noobs with Patrol Helicopter)")]
+            public bool PatrolHeliDamage = true;
+            [JsonProperty("Ignore twig when calculating base ownership (prevents exploiting)")]
+            public bool IgnoreTwig = true;
+            [JsonProperty("Check full ownership of the base instead of only one block")]
+            public bool CheckFullOwnership = true;
+            [JsonProperty("Kill fireballs when someone tries to raid protected player with fire (prevents lag)")]
+            public bool KillFire = true;
+        }
+
+        public class RelationshipSettings
+        {
+            [JsonProperty("Enable 'Clan' Support (Allow clan members to destroy each others entities & Remove protection from clan members when a member tries to raid)")]
+            public bool CheckClan = true;
+            [JsonProperty("Enable 'Team' Support (Allow team members to destroy each others entities & Remove protection from team members when a member tries to raid)")]
+            public bool CheckTeam = true;
+        }
+
+        public class RefundSettings
+        {
             [JsonProperty("Refund explosives")]
-            public bool Refund;
+            public bool RefundItem = true;
             [JsonProperty("Refunds before player starts losing explosives")]
-            public int RefundTimes;
+            public int RefundTimes = 4;
+        }
 
-            [JsonProperty("List of entities that can be destroyed even if owner is a noob, true = destroyable everywhere (not inside of owners TC range)")]
-            public Dictionary<string, bool> AllowedEntities = PlaceHolderDictionary;
+        public class ManageMessages
+        {
+            [JsonProperty("Notify player on first connection with protection time")]
+            public bool MessageOnFirstConnection = true;
+            [JsonProperty("Use game tips to send first connection message & lost protection to players")]
+            public bool UseGT = false;
+            [JsonProperty("Show message for not being able to raid")]
+            public bool ShowMessage = true;
+            [JsonProperty("Show time until raidable")]
+            public bool ShowTime = false;
+            [JsonProperty("Show time until raidable only to owners")]
+            public bool ShowOwnerTime = true;
+        }
+
+        public class EntitySettings
+        {
+            [JsonProperty("List of entities that can be destroyed even if owner is noob, true = destroyable everywhere")]
+            public Dictionary<string, string> AllowedEntities = AllowedEntitiesDictionary;
+            [JsonProperty("List of entities that can be destroyed without losing noob prtection, true = destroyable everywhere")]
+            public Dictionary<string, string> AllowedEntitiesNoob = AllowedEntitiesNoobDictionary;
+
+            public static Dictionary<string, string> AllowedEntitiesDictionary = new Dictionary<string, string>
+            {
+                {"ShortPrefabName", "Common Name"}, {"beartrap", "Snap Trap"}, {"landmine", "Landmine"},
+            };
+            public static Dictionary<string, string> AllowedEntitiesNoobDictionary = new Dictionary<string, string>
+            {
+                {"ShortPrefabName", "Common Name"}, {"campfire", "Camp Fire"},
+            };
+        }
+
+        public class AdvanceSettings
+        {
             [JsonProperty("User data refresh interval (seconds)")]
-            public int Frequency;
+            public int Frequency = 30;
+            [JsonProperty("Save interval (seconds)")]
+            public int SaveFrequency = 60;
+            [JsonProperty("Save data on Server Save")]
+            public bool OnServerSave = true;
             [JsonProperty("Show structure has no owner in console")]
-            public bool ShowNoOwnerBase;
-            [JsonProperty("Enable Logs (logs can be found in /oxide/logs/antinoobraid)")]
-            public bool EnableLogging;
-
-            public static Dictionary<string, bool> PlaceHolderDictionary = new Dictionary<string, bool>
-            {
-                {"Placeholder1", true }, {"Placeholder2", true }, {"Placeholder3", true }, {"Placeholder4", true }, {"Placeholder5", true },
-            };
-
-            public static readonly ConfigFile DefaultConfigFile = new ConfigFile
-            {
-                UnNoobManual = true,
-                ProtectionTime = 43200,
-                Frequency = 30,
-                RefundTimes = 4,
-                PatrolHeliDamage = true,
-                InactivityRemove = 3,
-                CheckFullOwnership = true,
-                CheckClanForOwner = true,
-                RemoveClanProtection = false,
-                Refund = true,
-                IgnoreTwig = true,
-                KillFire = true,
-                MessageOnFirstConnection = true,
-                UseGT = true,
-                AllowTwigDestruction = false,
-                ShowMessage = true,
-                ShowTime = false,
-                PreventNew = true,
-                UnNoobNew = true,
-                AllowedEntities = PlaceHolderDictionary,
-                CheckTeamForOwner = true,
-                RemoveTeamProtection = true,
-                EnableLogging = true,
-                ShowNoOwnerBase = false,
-            };
+            public bool ShowNoOwnerBase = false;
+            [JsonProperty("Enable Logs (Logs can be found in /oxide/logs/antinoobraid)")]
+            public bool EnableLogging = true;
         }
 
         private ConfigFile config;
@@ -178,9 +201,10 @@ namespace Oxide.Plugins
                 {"dataFileWiped_attempts", "Data file successfully wiped (raid attempts)"},
                 {"dataFileWiped_playerdata", "Data file successfully wiped (player data)"},
 
-                {"struct_noowner","Structure at {0} has no owner!" },
+                {"struct_noowner","Structure at {0} has no owner! OwnerID = {1} buildingID = {2}" },
                 {"clan_lostnoob" , "Clan '{0}' lost their noob status because they tried to raid" },
                 {"lost_teamsprotection" , "You lost your team noob protection for damaging a structure" },
+                {"lost_clansprotection" , "You lost your clan noob protection for damaging a structure" },
                 {"new_user_lostprotection" , "You lost your noob protection for damaging a structure" },
                 {"console_lostnoobstatus", "{0} hasn't connected for {1} days so he lost his noob status (can be raided)"},
                 {"console_notenough", "{0} doesn't have enough hours in game to be marked as a non-noob"},
@@ -188,12 +212,16 @@ namespace Oxide.Plugins
                 {"firstconnectionmessage", "You are a new player so your buildings are protected for first {0} hours of your time on server"},
 
                 {"pt_notInstalled_first", "Playtime Tracker is not installed, will check again in 30 seconds"},
-                {"pt_notInstalled", "Playtime Tracker is not installed!"},
+                {"pt_notInstalled", "Playtime Tracker is not installed. Please install and reload AntiNoobRaid!"},
                 {"pt_detected", "Playtime Tracker detected"},
+                {"C_notInstalled_first", "Clans is not installed, will check again in 30 seconds"},
+                {"C_notInstalled", "Clans is not installed. Please install and reload AntiNoobRaid!"},
+                {"C_detected", "Clans detected"},
 
                 {"userinfo_nofound", "Failed to get playtime info for {0}! trying again in 60 seconds!"},
                 {"userinfo_found", "Successfully got playtime info for {0}!"},
 
+                {"twig_can_attack", "This structure is Twig & is not raid protected. Please upgrade to Wood or higer for protection!"},
                 {"can_attack", "This structure is not raid protected"},
                 {"NotLooking", "You are not looking at a building/deployable"},
 
@@ -215,8 +243,9 @@ namespace Oxide.Plugins
                 {"refund_nTimes", "Your '{0}' was refunded. After {1} more attempts it wont be refunded"},
 
                 {"cannot_attack_no_time", "This entity cannot be destroyed because it was built by a new player"},
-                {"cannot_attack_new_raider", "Because you are a new player you cannot raid (yet)"},
                 {"cannot_attack_time", "This entity cannot be destroyed because it was built by a new player ({0})"},
+                {"looking_item", "The entity name is {0}"},
+                {"notlooking_item", "You need to look at a deployed item to get the name!"},
 
                 {"secs", " seconds"},
                 {"mins", " minutes"},
@@ -272,10 +301,10 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            public static ClanInfo GetClanOf(ulong ID)
+            public static ClanInfo GetClanOf(ulong playerID)
             {
                 foreach (var clan in ClanInfo.clanCache)
-                    if (clan.members.Contains(ID)) return clan;
+                    if (clan.members.Contains(playerID)) return clan;
 
                 return null;
             }
@@ -316,8 +345,7 @@ namespace Oxide.Plugins
         StoredDataItemList storedDataItemList;
 
         #endregion
-        #region Hooks
-
+        #region Setup/Saving
         private void Init()
         {
             permission.RegisterPermission(AdminPerm, this);
@@ -354,15 +382,26 @@ namespace Oxide.Plugins
             foreach (var entry in storedData.players.Where(x => !storedData.lastConnection.ContainsKey(x.Key)))
                 storedData.lastConnection.Add(entry.Key, string.Empty);
 
-                StartChecking();
-                CheckPlayersWithNoInfo();
+            StartChecking();
+            CheckPlayersWithNoInfo();
 
             timer.Every(60f, RefreshClanCache);
+
+            if (!config.Advance.OnServerSave)
+            {
+                float args = config.Advance.SaveFrequency;
+                int offset = (int) args;
+
+                timer.Every(offset, SaveData);
+            }
+
+            if (debug) PrintWarning($"Debug Version: {debugversion}");
 
             if (PlaytimeTracker == null)
             {
                 PrintWarning(lang.GetMessage("pt_notInstalled_first", this, null));
-                timer.Once(30f, () => {
+                timer.Once(30f, () =>
+                {
                     if (PlaytimeTracker == null)
                     {
                         PrintWarning(lang.GetMessage("pt_notInstalled", this, null));
@@ -371,56 +410,61 @@ namespace Oxide.Plugins
                     PrintWarning(lang.GetMessage("pt_detected", this, null));
                 });
             }
+            if (config.Relationship.CheckClan && Clans == null)
+            {
+                PrintWarning(lang.GetMessage("C_notInstalled_first", this, null));
+                timer.Once(30f, () => {
+                    if (Clans == null)
+                    {
+                        PrintWarning(lang.GetMessage("C_notInstalled", this, null));
+                        return;
+                    }
+                    PrintWarning(lang.GetMessage("C_detected", this, null));
+                });
+            }
         }
 
+        private void Unload()
+        {
+            SaveData();
+            SaveDataItemList();
+
+        }
+
+        private void OnServerSave()
+        {
+            if (config.Advance.OnServerSave) timer.Once(UnityEngine.Random.Range(5, 15), SaveData);
+        }
+
+        #endregion
+        #region Hooks
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitinfo)
         {
-            var owner = config.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
-            string name = hitinfo?.WeaponPrefab?.ShortPrefabName ?? string.Empty;
+            var owner = config.Other.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
             BasePlayer attacker = hitinfo.InitiatorPlayer;
             var dmgType = hitinfo?.damageTypes?.GetMajorityDamageType() ?? DamageType.Generic;
+            string name = CheckForRaidingTools(hitinfo);
 
             if (hitinfo == null || entity == null) return null; //null checks
 
-            // Patrol Helicopter
-            if (attacker == null && dmgType == DamageType.Bullet || name == "rocket_heli_napalm" || name == "rocket_heli")
+            if (entity?.OwnerID == attacker?.userID) return null;
+
+            if (dmgType == DamageType.Decay || dmgType == DamageType.Generic || dmgType == DamageType.Bite) return null;
+
+            if (entity.OwnerID == 0u || !(entity is BuildingBlock || entity is Door || entity.PrefabName.Contains("deployable") || entity.PrefabName.Contains("turret"))) return null;
+
+            if (config.Other.IgnoreTwig && (entity as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs) return null;
+
+            if (CheckForHelicopterOrMLRS(entity, hitinfo) == true) return null;
+
+            if (ExplosiveAmmoFix(entity, hitinfo) == true) return null;
+
+            if (config.Entity.AllowedEntities.ContainsKey(entity.ShortPrefabName))
             {
-                if (config.PatrolHeliDamage)
-                {
-                    hitinfo.HitMaterial = 1;
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    if (debug)
-                    {
-                        var msg = "Allow Patrol Helicopter to damage noob structures set true";
-                        Puts(msg);
-                    }
-                    return null;
-                }
-                else if (!config.PatrolHeliDamage)
-                {
-
-                    if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        if (debug)
-                        {
-                            var msg = "Trying To Nullify Damage of BaseHelicopter";
-                            Puts(msg);
-                        }
-                        return true;
-                    }
-                }
-
                 return null;
-
             }
 
-            // MLRS Damage Fix to Noob Structures
-            if (attacker == null && name == "rocket_mlrs")
-
+            if (config.Entity.AllowedEntitiesNoob.ContainsKey(entity.ShortPrefabName))
             {
                 if (PlayerIsNew(owner))
                 {
@@ -428,96 +472,22 @@ namespace Oxide.Plugins
                     hitinfo.DoHitEffects = false;
                     hitinfo.HitMaterial = 0;
                     hitinfo.damageTypes.ScaleAll(0f);
-                    if (debug)
+                    NextTick(() =>
                     {
-                        var msg = $"Trying To Nullify MLRS Damage";
-                        Puts(msg);
-                    }
+                        MessagePlayer(attacker, owner);
+                        Refund(attacker, name, entity);
+                    });
                     return true;
                 }
 
                 return null;
-
             }
 
-            if (dmgType == DamageType.Decay || dmgType == DamageType.Generic) return null;
-
-            if (entity.OwnerID == 0u || !(entity is BuildingBlock || entity is Door || entity.PrefabName.Contains("deployable") || entity.PrefabName.Contains("turret"))) return null;
-            
-            if (config.AllowTwigDestruction && ((entity as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs)) return null;
-
-            if (config.AllowedEntities.ContainsKey(entity.ShortPrefabName))
-            {
-                if (config.AllowedEntities[entity.ShortPrefabName] || entity.GetBuildingPrivilege() == null) return null;
-                if (!entity.GetBuildingPrivilege().authorizedPlayers.Select(x => x.userid).Contains(entity.OwnerID)) return null;
-            }
-
-            if (attacker == null || entity?.OwnerID == attacker?.userID) return null;
+            if (attacker == null || owner == 0u) return null;
 
             if (storedData.IgnoredPlayers.Contains(attacker.userID)) return null;
 
-            if (owner == 0u) return null;
-
             if (owner == attacker?.userID) return null;
-
-            if (config.CheckClanForOwner)
-            {
-                ulong userID = attacker?.userID ?? 0u;
-                var clan = ClanInfo.GetClanOf(userID) ?? null;
-                if (clan == null)
-                {
-                    var clanName = Clans?.Call<string>("GetClanOf", userID) ?? string.Empty;
-                    if (!string.IsNullOrEmpty(clanName))
-                    {
-                        var members = GetClanMembers(clanName);
-                        var claninfo = new ClanInfo { clanName = clanName, members = members };
-                        ClanInfo.clanCache.Add(claninfo);
-
-                        if (claninfo.members.Contains(owner)) return null;
-                    }
-                }
-
-                else if (clan.members.Contains(owner)) return null;
-            }
-
-            if (config.CheckTeamForOwner)
-            {
-                var instance = RelationshipManager.ServerInstance;
-                if (instance == null) PrintWarning("RelationshipManager instance is null! how is this even possible?");
-
-                else
-                {
-                    BasePlayer ownerPlayer;
-                    if (instance.cachedPlayers.TryGetValue(owner, out ownerPlayer))
-                    {
-                        if (ownerPlayer.currentTeam == attacker.currentTeam && ownerPlayer.currentTeam != 0) return null;
-                    }
-                }
-            }
-
-            if (config.RemoveTeamProtection && !string.IsNullOrEmpty(hitinfo?.WeaponPrefab?.ShortPrefabName))
-            {
-                if (attacker.currentTeam != 0)
-                {
-                    if (storedData.players[attacker.userID] >= 0)
-                    {
-                        SendReply(attacker, lang.GetMessage("lost_teamsprotection", this, attacker.UserIDString));
-                        MessagePlayer(attacker, owner);
-                        if (config.EnableLogging) LogToFile($"TeamLostNoob", $"[{DateTime.Now}] - {attacker} lost their team noob status.", this, false);
-
-                    }
-
-                    var team = RelationshipManager.ServerInstance?.teams[attacker.currentTeam];
-                    foreach (var member in team.members) storedData.players[member] = -50d;
-                }
-            }
-
-            if (config.RemoveClanProtection && !string.IsNullOrEmpty(hitinfo?.WeaponPrefab?.ShortPrefabName))
-            {
-                string val;
-                if (raidtools.TryGetValue(hitinfo?.WeaponPrefab?.ShortPrefabName, out val))
-                    RemoveClanP(attacker?.userID ?? 0u);
-            }
 
             bool wipe = false;
             try
@@ -531,6 +501,30 @@ namespace Oxide.Plugins
             }
 
             if (wipe) return null;
+
+            if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
+            {
+                return null;
+            }
+            if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
+            {
+                if (!string.IsNullOrEmpty(name) && config.Main.UnNoobNew)
+                {
+                    RemoveTeamProtection(attacker, hitinfo);
+                }
+            }
+
+            if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
+            {
+                return null;
+            }
+            if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
+            {
+                if (!string.IsNullOrEmpty(name) && config.Main.UnNoobNew)
+                {
+                    RemoveClanProtection(attacker, attacker?.userID ?? 0u);
+                }
+            }
 
             if (cooldown.Contains(attacker))
             {
@@ -550,7 +544,7 @@ namespace Oxide.Plugins
             RemoveCD(cooldown, attacker);
             LogPlayer(attacker);
 
-            if (config.PreventNew && PlayerIsNew(attacker.userID))
+            if (PlayerIsNew(owner))
             {
                 //keep in mind, antinoobraid.noob perm doesn't get removed
                 hitinfo.damageTypes = new DamageTypeList();
@@ -559,72 +553,55 @@ namespace Oxide.Plugins
                 hitinfo.damageTypes.ScaleAll(0f);
                 NextTick(() => {
                     //if player was *manually* set to noob we don't remove his protection on raid attempt
-                    if (config.UnNoobNew)
+                    if (config.Main.UnNoobNew)
                     {
-                        if (storedData.players[attacker.userID] >= 0 || (storedData.players[attacker.userID] == -25d && config.UnNoobManual))
+                        if (storedData.players[attacker.userID] >= 0 || (storedData.players[attacker.userID] == -25d && config.Main.UnNoobManual))
                         {
                             storedData.players[attacker.userID] = -50d;
-                            SendReply(attacker, lang.GetMessage("new_user_lostprotection", this, attacker.UserIDString));
-                            if (config.EnableLogging) LogToFile("damagedstructure", $"[{DateTime.Now}] - {attacker.userID} lost there noob protection for damaging {entity.OwnerID} structure", this, false);
+
+                            string msg = string.Format(lang.GetMessage("new_user_lostprotection", this, attacker.UserIDString));
+
+                            if (config.Messages.UseGT)
+                            {
+                                attacker.SendConsoleCommand("gametip.showgametip", msg);
+                                timer.Once(10f, () => attacker.SendConsoleCommand("gametip.hidegametip"));
+                            }
+                            else
+                            {
+                                SendReply(attacker, msg);
+                            }
+
+                            if (config.Advance.EnableLogging) LogToFile("damagedstructure", $"[{DateTime.Now}] - {attacker.userID} lost there noob protection for damaging {entity.OwnerID} structure", this, false);
                         }
                     }
-
-                    else SendReply(attacker, lang.GetMessage("cannot_attack_new_raider", this, attacker.UserIDString));
-
-                    Refund(attacker, name, entity);
-                    if (debug)
-                    {
-                        var msg = $"Trying To Refund {name} To {attacker}";
-                        Puts(msg);
-                    }
-
-                });
-                return true;
-            }
-
-            if (PlayerIsNew(owner))
-            {
-                hitinfo.damageTypes = new DamageTypeList();
-                hitinfo.DoHitEffects = false;
-                hitinfo.HitMaterial = 0;
-                hitinfo.damageTypes.ScaleAll(0f);
-                if (debug)
-                {
-                    var msg = $"Trying To Nullify Damage {name}";
-                    Puts(msg);
-                } 
-                NextTick(() => {
                     MessagePlayer(attacker, owner);
                     Refund(attacker, name, entity);
-                    if (debug)
-                    {
-                        var msg = $"Trying To Refund {name} To {attacker}";
-                        Puts(msg);
-                    }
+
                 });
                 return true;
             }
-           
-            return null;
 
+            return null;
         }
 
         private void OnFireBallDamage(FireBall fireball, BaseCombatEntity entity, HitInfo hitinfo)
         {
-            if (hitinfo == null || fireball == null || entity == null || !config.KillFire) return;
+            if (hitinfo == null || fireball == null || entity == null || !config.Other.KillFire) return;
 
             if (!(entity is BuildingBlock || entity is Door || entity.OwnerID != 0u || entity.PrefabName.Contains("deployable")) || fireball.IsDestroyed) return;
 
-            if (config.AllowTwigDestruction && ((entity as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs)) return;
-
-            if (config.AllowedEntities.ContainsKey(entity.ShortPrefabName))
-            {
-                if (config.AllowedEntities[entity.ShortPrefabName] || entity.GetBuildingPrivilege() == null) return;
-                if (!entity.GetBuildingPrivilege().authorizedPlayers.Select(x => x.userid).Contains(entity.OwnerID)) return;
-            }
+            if (config.Other.IgnoreTwig && (entity as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs) return;
 
             BasePlayer attacker = hitinfo?.InitiatorPlayer;
+
+            if (config.Entity.AllowedEntities.ContainsKey(entity.ShortPrefabName))
+            {
+                return;
+            }
+
             if (entity?.OwnerID == attacker?.userID) return;
+
+            if (attacker?.userID ==  null) return;
 
             if (PlayerIsNew(entity.OwnerID))
             {
@@ -652,22 +629,30 @@ namespace Oxide.Plugins
 
         private void OnEntityKill(BuildingBlock block) => _blocks.Remove(block);
 
-        private void OnServerSave()
-        {
-            timer.Once(UnityEngine.Random.Range(5, 15), SaveData);
-        }
-
         private void OnUserConnected(IPlayer player)
         {
             BasePlayer bp = player.Object as BasePlayer;
             LastConnect(bp.userID);
         }
 
-        private void Unload()
+        private void OnPlayerSleepEnded(BasePlayer player)
         {
-            SaveData();
-            SaveDataItemList();
+            if (!config.Messages.MessageOnFirstConnection || storedData.FirstMessaged.Contains(player.userID)) return;
+            storedData.FirstMessaged.Add(player.userID);
 
+            var val = 0d;
+            if (storedData.players.TryGetValue(player.userID, out val) && (val > 100d || val == -50d || val == -25d)) return;
+
+            string msg = string.Format(lang.GetMessage("firstconnectionmessage", this, player.UserIDString), (config.Main.ProtectionTime / 3600d));
+            if (config.Messages.UseGT)
+            {
+                player.SendConsoleCommand("gametip.showgametip", msg);
+                timer.Once(10f, () => player.SendConsoleCommand("gametip.hidegametip"));
+            }
+            else
+            {
+                SendReply(player, msg);
+            }
         }
 
         #endregion
@@ -728,17 +713,98 @@ namespace Oxide.Plugins
         #endregion
         #region Methods
 
+        #region Clans
+        private bool AllowOwnerCheckTimeClans(BasePlayer attacker, ulong ID)
+        {
+            var player = Convert.ToString(attacker.UserIDString);
+            var owner = Convert.ToString(ID);
+            var val = 0d;
+
+            if (config.Messages.ShowOwnerTime && config.Relationship.CheckClan)
+            {
+                var ownerclanName = Clans.Call<string>("GetClanOf", player);
+
+                var playerclanName = Clans.Call<string>("GetClanOf", owner);
+
+                if (!string.IsNullOrEmpty(playerclanName) || !string.IsNullOrEmpty(ownerclanName))
+                {
+                    if (playerclanName == ownerclanName)
+                    {
+                        if (storedData.players.TryGetValue(ID, out val) && (val == -50d)) return false;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private bool CheckClan(BaseCombatEntity entity, HitInfo hitinfo)
+        {
+            var name = CheckForRaidingTools(hitinfo);
+            var owner = config.Other.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
+            BasePlayer attacker = hitinfo.InitiatorPlayer;
+
+
+            ulong userID = attacker?.userID ?? 0u;
+            var clan = ClanInfo.GetClanOf(userID) ?? null;
+            if (clan == null)
+            {
+                var clanName = Clans?.Call<string>("GetClanOf", userID) ?? string.Empty;
+                if (!string.IsNullOrEmpty(clanName))
+                {
+                    var members = GetClanMembers(clanName);
+                    var claninfo = new ClanInfo { clanName = clanName, members = members };
+                    ClanInfo.clanCache.Add(claninfo);
+
+                    if (claninfo.members.Contains(owner)) return true;
+                }
+            }
+
+            else if (clan.members.Contains(owner)) return true;
+
+            return false;
+        }
+
+        private List<ulong> GetClanMembers(string clanName)
+        {
+            if (string.IsNullOrEmpty(clanName)) return new List<ulong>();
+
+            var claninfo = ClanInfo.FindClanByName(clanName);
+            if (claninfo != null) return claninfo.members;
+
+            if (Clans == null) return new List<ulong>();
+
+            List<ulong> IDlist = new List<ulong>();
+
+            foreach (var p in covalence.Players.All)
+            {
+                string clan = Clans?.Call<string>("GetClanOf", p) ?? string.Empty;
+
+                if (clan == clanName)
+                    IDlist.Add(ulong.Parse(p.Id));
+            }
+
+            RefreshClanCache();
+            return IDlist;
+        }
+
         private void RefreshClanCache()
         {
+            if (config.Relationship.CheckClan && Clans == null)
+            {
+                Puts(lang.GetMessage("C_notInstalled", this, null));
+                return;
+            }
+
             foreach (var player in covalence.Players.All.Where(x => !x.IsBanned))
             {
-                ulong ID = ulong.Parse(player.Id);
-                var clanName = Clans?.Call<string>("GetClanOf", ID) ?? string.Empty;
+                ulong playerID = ulong.Parse(player.Id);
+                var clanName = Clans.Call<string>("GetClanOf", playerID);
                 if (!string.IsNullOrEmpty(clanName))
                 {
                     if (!ClanInfo.clanCache.Select(x => x.clanName).Contains(clanName))
                     {
-                        var clan = new ClanInfo { clanName = clanName, members = new List<ulong> { ID } };
+                        var clan = new ClanInfo { clanName = clanName, members = new List<ulong> { playerID } };
                         ClanInfo.clanCache.Add(clan);
                     }
 
@@ -746,12 +812,154 @@ namespace Oxide.Plugins
                     {
                         foreach (var clan in ClanInfo.clanCache)
                         {
-                            if (clanName == clan.clanName && !clan.members.Contains(ID))
-                                clan.members.Add(ID);
+                            if (clanName == clan.clanName && !clan.members.Contains(playerID))
+                                clan.members.Add(playerID);
                         }
                     }
                 }
             }
+        }
+
+        private void RemoveClanProtection(BasePlayer attacker, ulong playerID)
+        {
+            if (playerID == 0u) return;
+
+            var clanName = Clans.Call<string>("GetClanOf", playerID);
+
+            if (string.IsNullOrEmpty(clanName)) return;
+
+            var ClanMembers = ClanInfo.FindClanByName(clanName)?.members ?? new List<ulong>();
+            if (ClanMembers.Count < 1)
+            {
+                return;
+            }
+
+            var list = storedData.players.Where(x => x.Value != -50d && ClanMembers.Contains(x.Key));
+            if (list.Count() < 1) return;
+
+
+            foreach (var member in list.ToList()) storedData.players[member.Key] = -50d;
+            Puts(lang.GetMessage("clan_lostnoob", this, null), clanName);
+
+            string msg = string.Format(lang.GetMessage("lost_clansprotection", this, attacker.UserIDString));
+
+            if (config.Messages.UseGT)
+            {
+                attacker.SendConsoleCommand("gametip.showgametip", msg);
+                timer.Once(10f, () => attacker.SendConsoleCommand("gametip.hidegametip"));
+            }
+            else
+            {
+                SendReply(attacker, msg);
+            }
+
+            if (config.Advance.EnableLogging) LogToFile("clanlostnoob", $"[{DateTime.Now}] - Clan '{clanName}' lost their noob status because {playerID} tried to raid", this, false);
+        }
+
+        #endregion
+
+        #region Teams
+        private bool AllowOwnerCheckTimeTeams(BasePlayer attacker, ulong ID)
+        {
+            var val = 0d;
+
+            if (config.Messages.ShowOwnerTime && config.Relationship.CheckTeam)
+            {
+                var instance = RelationshipManager.ServerInstance;
+
+                BasePlayer ownerPlayer;
+                if (instance.cachedPlayers.TryGetValue(ID, out ownerPlayer))
+                {
+                    if (ownerPlayer.currentTeam == attacker.currentTeam && ownerPlayer.currentTeam != 0)
+                    {
+                        if (storedData.players.TryGetValue(ID, out val) && (val == -50d)) return false;
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private bool CheckTeam(BaseCombatEntity entity, HitInfo hitinfo)
+        {
+            var name = CheckForRaidingTools(hitinfo);
+            var owner = config.Other.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
+            BasePlayer attacker = hitinfo.InitiatorPlayer;
+            var instance = RelationshipManager.ServerInstance;
+
+            //Check Team For Owner
+            if (instance == null) PrintWarning("RelationshipManager instance is null! how is this even possible?");
+            else
+            {
+                BasePlayer ownerPlayer;
+                if (instance.cachedPlayers.TryGetValue(owner, out ownerPlayer))
+                {
+                    if (ownerPlayer.currentTeam == attacker.currentTeam && ownerPlayer.currentTeam != 0) return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void RemoveTeamProtection(BaseCombatEntity entity, HitInfo hitinfo)
+        {
+            var name = CheckForRaidingTools(hitinfo);
+            var owner = config.Other.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
+            BasePlayer attacker = hitinfo.InitiatorPlayer;
+            var instance = RelationshipManager.ServerInstance;
+
+            //Remove protection from whole team
+            if (config.Main.UnNoobNew)
+            {
+                if (!string.IsNullOrEmpty(name))
+                {
+                    if (attacker.currentTeam != 0)
+                    {
+                        if (storedData.players[attacker.userID] >= 0)
+                        {
+                            string msg = string.Format(lang.GetMessage("lost_teamsprotection", this, attacker.UserIDString));
+
+                            if (config.Messages.UseGT)
+                            {
+                                attacker.SendConsoleCommand("gametip.showgametip", msg);
+                                timer.Once(10f, () => attacker.SendConsoleCommand("gametip.hidegametip"));
+                            }
+                            else
+                            {
+                                SendReply(attacker, msg);
+                            }
+
+                            MessagePlayer(attacker, owner);
+                            if (config.Advance.EnableLogging) LogToFile($"TeamLostNoob", $"[{DateTime.Now}] - {attacker} lost their team noob status.", this, false);
+
+                        }
+
+                        var team = RelationshipManager.ServerInstance?.teams[attacker.currentTeam];
+                        foreach (var member in team.members) storedData.players[member] = -50d;
+                    }
+                }
+            }
+        }
+
+        #endregion
+
+        private bool AllowOwnerCheckTime(BasePlayer attacker, ulong ID)
+        {
+            var player = Convert.ToString(attacker.UserIDString);
+            var owner = Convert.ToString(ID);
+            var val = 0d;
+
+            if (config.Messages.ShowOwnerTime)
+            {
+                if (player == owner)
+                {
+                    if (storedData.players.TryGetValue(ID, out val) && (val == -50d)) return false;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void APICall(ulong ID, bool secondattempt = false)
@@ -773,7 +981,7 @@ namespace Oxide.Plugins
             catch (Exception)
             {
                 Puts(lang.GetMessage("userinfo_nofound", this, null), ID);
-                if (config.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}", this, false);
+                if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}", this, false);
                 if (!secondattempt) timer.Once(60f, () => APICall(ID, true));
             }
 
@@ -782,7 +990,7 @@ namespace Oxide.Plugins
                 if (secondattempt) storedData.playersWithNoData.Add(ID);
 
                 Puts(lang.GetMessage("userinfo_nofound", this, null), ID);
-                if (config.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}", this, false);
+                if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}", this, false);
                 return;
             }
 
@@ -791,10 +999,10 @@ namespace Oxide.Plugins
             if (storedData.players.ContainsKey(ID)) storedData.players[ID] = apitime;
 
             else
-            { 
+            {
                 storedData.players.Add(ID, apitime);
                 Puts(lang.GetMessage("userinfo_found", this, null), ID);
-                if (config.EnableLogging) LogToFile("userinfo", $"[{DateTime.Now}] - Successfully got playtime info for {ID}", this, false);
+                if (config.Advance.EnableLogging) LogToFile("userinfo", $"[{DateTime.Now}] - Successfully got playtime info for {ID}", this, false);
 
             }
         }
@@ -830,6 +1038,126 @@ namespace Oxide.Plugins
             APICall(ID);
         }
 
+        private bool CheckForHelicopterOrMLRS(BaseCombatEntity entity, HitInfo hitinfo)
+        {
+            var name = CheckForRaidingTools(hitinfo);
+            var owner = config.Other.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
+            BasePlayer attacker = hitinfo.InitiatorPlayer;
+            var dmgType = hitinfo?.damageTypes?.GetMajorityDamageType() ?? DamageType.Generic;
+
+            if (name != null && owner != 0u && attacker != null && dmgType != DamageType.Bullet) return false;
+
+            // Patrol Helicopter
+            if (name == "rocket_heli" && owner != 0u && attacker == null && dmgType == DamageType.Explosion)
+                {
+                    if (config.Other.PatrolHeliDamage)
+                    {
+                        hitinfo.damageTypes.ScaleAll(1f);
+                        return true;
+                    }
+                    else if (!config.Other.PatrolHeliDamage)
+                    {
+                        if (PlayerIsNew(owner))
+                        {
+                            hitinfo.damageTypes = new DamageTypeList();
+                            hitinfo.DoHitEffects = false;
+                            hitinfo.HitMaterial = 0;
+                            hitinfo.damageTypes.ScaleAll(0f);
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+
+            if (name == "rocket_heli_napalm" && owner != 0u && attacker == null && dmgType == DamageType.Heat)
+                {
+                    if (config.Other.PatrolHeliDamage)
+                    {
+                        hitinfo.damageTypes.ScaleAll(1f);
+                        return true;
+                    }
+                    else if (!config.Other.PatrolHeliDamage)
+                    {
+                        if (PlayerIsNew(owner))
+                        {
+                            hitinfo.damageTypes = new DamageTypeList();
+                            hitinfo.DoHitEffects = false;
+                            hitinfo.HitMaterial = 0;
+                            hitinfo.damageTypes.ScaleAll(0f);
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+
+            if (name == null && owner != 0u && attacker == null && dmgType == DamageType.Bullet)
+                {
+                    if (config.Other.PatrolHeliDamage)
+                    {
+                        hitinfo.damageTypes.ScaleAll(1f);
+                        return true;
+                    }
+                    else if (!config.Other.PatrolHeliDamage)
+                    {
+                        if (PlayerIsNew(owner))
+                        {
+                            hitinfo.damageTypes = new DamageTypeList();
+                            hitinfo.DoHitEffects = false;
+                            hitinfo.HitMaterial = 0;
+                            hitinfo.damageTypes.ScaleAll(0f);
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+
+            // MLRS Damage Fix to Noob Structures
+            if (attacker == null && name == "rocket_mlrs")
+            {
+                if (PlayerIsNew(owner))
+                {
+                    hitinfo.damageTypes = new DamageTypeList();
+                    hitinfo.DoHitEffects = false;
+                    hitinfo.HitMaterial = 0;
+                    hitinfo.damageTypes.ScaleAll(0f);
+                    return true;
+                }
+
+                return false;
+            }
+            return false;
+        }
+
+        private string CheckForRaidingTools(HitInfo hitinfo)
+        {
+            string name = string.Empty;
+
+            if (hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_fire"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_heli_napalm"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_heli"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_mlrs"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_hv"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_basic"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "explosive.timed.deployed"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "survey_charge.deployed"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "explosive.satchel.deployed"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "grenade.beancan.deployed"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "grenade.f1.deployed"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "40mm_grenade_he")
+            {
+                name = hitinfo?.WeaponPrefab?.ShortPrefabName;
+            }
+            else
+            {
+                name = hitinfo?.ProjectilePrefab?.name.ToString();
+            }
+
+            return name;
+        }
+
         private string CheckLeft(int intsecs)
         {
             var time = DateTime.Now.AddSeconds(intsecs - 1);
@@ -851,7 +1179,7 @@ namespace Oxide.Plugins
 
         private void CheckPlayersWithNoInfo()
         {
-            int rate = (config.Frequency <= 10) ? 10 : config.Frequency - 10;
+            int rate = (config.Advance.Frequency <= 10) ? 10 : config.Advance.Frequency - 10;
 
             timer.Every(rate, () =>
             {
@@ -883,40 +1211,156 @@ namespace Oxide.Plugins
 
                     storedData.players.Add(ID, time);
                     Puts(lang.GetMessage("userinfo_found", this, null), ID);
-                    if (config.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Successfully got playtime info for {ID}", this, false);
+                    if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Successfully got playtime info for {ID}", this, false);
                     storedData.playersWithNoData.Remove(ID);
                     continue;
                 }
             });
         }
 
-        private void OnPlayerConnected(BasePlayer player)
+        private bool ExplosiveAmmoFix(BaseCombatEntity entity, HitInfo hitinfo)
         {
-            if (!config.MessageOnFirstConnection || storedData.FirstMessaged.Contains(player.userID)) return;
-            storedData.FirstMessaged.Add(player.userID);
+            var name = CheckForRaidingTools(hitinfo);
+            var owner = config.Other.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
+            BasePlayer attacker = hitinfo.InitiatorPlayer;
+            var dmgType = hitinfo?.damageTypes?.GetMajorityDamageType() ?? DamageType.Generic;
 
-            var val = 0d;
-            if (storedData.players.TryGetValue(player.userID, out val) && (val > 100d || val == -50d || val == -25d)) return;
-
-            string msg = string.Format(lang.GetMessage("firstconnectionmessage", this, player.UserIDString), (config.ProtectionTime / 3600d));
-
-            if (config.UseGT)
+            if (config.Entity.AllowedEntities.ContainsKey(entity.ShortPrefabName))
             {
-                if (config.UseGT && GameTipAPI != null)
-                {
-                    GameTipAPI?.Call("ShowGameTip", player, msg, 10f, true);
-                }
-                else
-                {
-                    player.SendConsoleCommand("gametip.showgametip", msg);
-                    timer.Once(10f, () => player.SendConsoleCommand("gametip.hidegametip"));
-                }
-            }
-            else
-            {
-                SendReply(player, msg);
+                return false;
             }
 
+            if (config.Entity.AllowedEntitiesNoob.ContainsKey(entity.ShortPrefabName))
+            {
+                if (name == null && owner != 0u && attacker == null && dmgType == DamageType.Heat)
+                {
+                    if (PlayerIsNew(owner))
+                    {
+                        hitinfo.damageTypes = new DamageTypeList();
+                        hitinfo.DoHitEffects = false;
+                        hitinfo.HitMaterial = 0;
+                        hitinfo.damageTypes.ScaleAll(0f);
+                        return true;
+                    }
+                }
+
+                else if (name == null && owner != 0u && attacker != null && dmgType == DamageType.Explosion)
+                {
+                    if (PlayerIsNew(owner))
+                    {
+                        hitinfo.damageTypes = new DamageTypeList();
+                        hitinfo.DoHitEffects = false;
+                        hitinfo.HitMaterial = 0;
+                        hitinfo.damageTypes.ScaleAll(0f);
+                        return true;
+                    }
+                }
+
+                else if (PlayerIsNew(owner))
+                {
+                    hitinfo.damageTypes = new DamageTypeList();
+                    hitinfo.DoHitEffects = false;
+                    hitinfo.HitMaterial = 0;
+                    hitinfo.damageTypes.ScaleAll(0f);
+                    NextTick(() =>
+                    {
+                        MessagePlayer(attacker, owner);
+                        Refund(attacker, name, entity);
+                    });
+                    return true;
+                }
+
+                return false;
+            }
+
+            if (name == "riflebullet_explosive" && owner != 0u && attacker != null && dmgType == DamageType.Bullet)
+            {
+                if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false) return false;
+                if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
+                {
+                    hitinfo.damageTypes.ScaleAll(1f);
+                    return true;
+                }
+                if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false) return false;
+                if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
+                {
+                    hitinfo.damageTypes.ScaleAll(1f);
+                    return true;
+                }
+                else if (PlayerIsNew(owner))
+                {
+                    hitinfo.damageTypes = new DamageTypeList();
+                    hitinfo.DoHitEffects = false;
+                    hitinfo.HitMaterial = 0;
+                    hitinfo.damageTypes.ScaleAll(0f);
+                    NextTick(() =>
+                    {
+                        //if player was *manually* set to noob we don't remove his protection on raid attempt
+                        if (config.Main.UnNoobNew)
+                        {
+                            if (storedData.players[attacker.userID] >= 0 || (storedData.players[attacker.userID] == -25d && config.Main.UnNoobManual))
+                            {
+                                storedData.players[attacker.userID] = -50d;
+
+                                string msg = string.Format(lang.GetMessage("new_user_lostprotection", this, attacker.UserIDString));
+
+                                if (config.Messages.UseGT)
+                                {
+                                    attacker.SendConsoleCommand("gametip.showgametip", msg);
+                                    timer.Once(10f, () => attacker.SendConsoleCommand("gametip.hidegametip"));
+                                }
+                                else
+                                {
+                                    SendReply(attacker, msg);
+                                }
+
+                                if (config.Advance.EnableLogging) LogToFile("damagedstructure", $"[{DateTime.Now}] - {attacker.userID} lost there noob protection for damaging {entity.OwnerID} structure", this, false);
+                            }
+                        }
+                        MessagePlayer(attacker, owner);
+                        Refund(attacker, name, entity);
+                    });
+                    return true;
+                }
+            }
+
+            if (name == null && owner != 0u && attacker != null && dmgType == DamageType.Explosion)
+            {
+                if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false) return false;
+                if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
+                {
+                    hitinfo.damageTypes.ScaleAll(1f);
+                    return true;
+                }
+                if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false) return false;
+                if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
+                {
+                    hitinfo.damageTypes.ScaleAll(1f);
+                    return true;
+                }
+                else if (PlayerIsNew(owner))
+                {
+                    hitinfo.damageTypes = new DamageTypeList();
+                    hitinfo.DoHitEffects = false;
+                    hitinfo.HitMaterial = 0;
+                    hitinfo.damageTypes.ScaleAll(0f);
+                    return true;
+                }
+            }
+
+            if (name == null && owner != 0u && attacker == null && dmgType == DamageType.Heat)
+            {
+                if (PlayerIsNew(owner))
+                {
+                    hitinfo.damageTypes = new DamageTypeList();
+                    hitinfo.DoHitEffects = false;
+                    hitinfo.HitMaterial = 0;
+                    hitinfo.damageTypes.ScaleAll(0f);
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private ulong FullOwner(BaseEntity ent, BasePlayer p = null)
@@ -927,8 +1371,11 @@ namespace Oxide.Plugins
             if (block == null) return ent.OwnerID;
 
             var cached = BuildingInfo.GetByBuildingID(block.buildingID);
+
             if (cached != null)
+            {
                 if (cached.GetCacheAge() < 180 && cached.GetCacheAge() != -1) return cached.OwnerID;
+            }
 
             var ownership = new Dictionary<ulong, int>();
 
@@ -936,7 +1383,7 @@ namespace Oxide.Plugins
 
             foreach (var x in _blocks) // no more expensive LINQ
             {
-                if (x.buildingID != block.buildingID || config.IgnoreTwig && x.grade == BuildingGrade.Enum.Twigs)
+                if (x.buildingID != block.buildingID || config.Other.IgnoreTwig && x.grade == BuildingGrade.Enum.Twigs)
                 {
                     continue;
                 }
@@ -948,8 +1395,19 @@ namespace Oxide.Plugins
             if (ownership.Count == 0)
             {
                 //Should this even happen?
-                if (config.ShowNoOwnerBase) PrintWarning(lang.GetMessage("struct_noowner", this, null), ent.transform.position);
-                if (config.EnableLogging) LogToFile("other", $"[{DateTime.Now}] - Structure at {ent.transform.position} has no owner", this, false);
+                if (config.Advance.ShowNoOwnerBase) PrintWarning(lang.GetMessage("struct_noowner", this, null), ent.transform.position, ent.OwnerID, block.buildingID);
+                if (config.Advance.EnableLogging) LogToFile("other", $"[{DateTime.Now}] - Structure at {ent.transform.position} has no owner", this, false);
+
+                if (cached != null)
+                {
+                    cached.OwnerID = 0;
+                    cached.lastUpdate = DateTime.UtcNow;
+                }
+                else
+                {
+                    BuildingInfo.buildCache.Add(new BuildingInfo { buildingID = block.buildingID, lastUpdate = DateTime.UtcNow, OwnerID = 0 });
+                }
+
                 return ent.OwnerID;
             }
 
@@ -964,29 +1422,6 @@ namespace Oxide.Plugins
             else BuildingInfo.buildCache.Add(new BuildingInfo { buildingID = block.buildingID, lastUpdate = DateTime.UtcNow, OwnerID = owner });
 
             return owner;
-        }
-
-        private List<ulong> GetClanMembers(string clanName)
-        {
-            if (string.IsNullOrEmpty(clanName)) return new List<ulong>();
-
-            var claninfo = ClanInfo.FindClanByName(clanName);
-            if (claninfo != null) return claninfo.members;
-
-            if (Clans == null) return new List<ulong>();
-
-            List<ulong> IDlist = new List<ulong>();
-
-            foreach (var p in covalence.Players.All)
-            {
-                string clan = Clans?.Call<string>("GetClanOf", p) ?? string.Empty;
-
-                if (clan == clanName)
-                    IDlist.Add(ulong.Parse(p.Id));
-            }
-
-            RefreshClanCache();
-            return IDlist;
         }
 
         private BaseEntity GetLookAtEntity(BasePlayer player, float maxDist = 10f)
@@ -1018,13 +1453,40 @@ namespace Oxide.Plugins
         {
             if (!storedData.players.ContainsKey(ID)) return;
             double time2 = storedData.players[ID];
-            int left = (int)(config.ProtectionTime - time2);
+            int left = (int)(config.Main.ProtectionTime - time2);
 
-            if (config.ShowMessage)
+            if (config.Messages.ShowMessage)
             {
-                if (PlayerIsNew(ID))
+                if (config.Messages.ShowOwnerTime && AllowOwnerCheckTime(attacker, ID))
                 {
-                    if (config.ShowTime)
+                    if (PlayerIsNew(ID))
+                    {
+                        SendReply(attacker, lang.GetMessage("cannot_attack_time", this, attacker.UserIDString), CheckLeft(left));
+                        return;
+                    }
+                }
+
+                else if (config.Messages.ShowOwnerTime && AllowOwnerCheckTimeClans(attacker, ID))
+                {
+                    if (PlayerIsNew(ID))
+                    {
+                        SendReply(attacker, lang.GetMessage("cannot_attack_time", this, attacker.UserIDString), CheckLeft(left));
+                        return;
+                    }
+                }
+
+                else if (config.Messages.ShowOwnerTime && AllowOwnerCheckTimeTeams(attacker, ID))
+                {
+                    if (PlayerIsNew(ID))
+                    {
+                        SendReply(attacker, lang.GetMessage("cannot_attack_time", this, attacker.UserIDString), CheckLeft(left));
+                        return;
+                    }
+                }
+
+                else if (PlayerIsNew(ID))
+{
+                    if (config.Messages.ShowTime)
                     {
                         SendReply(attacker, lang.GetMessage("cannot_attack_time", this, attacker.UserIDString), CheckLeft(left));
                         return;
@@ -1033,6 +1495,8 @@ namespace Oxide.Plugins
                     SendReply(attacker, lang.GetMessage("cannot_attack_no_time", this, attacker.UserIDString));
                     return;
                 }
+                
+                else
                 SendReply(attacker, lang.GetMessage("can_attack", this, attacker.UserIDString));
             }
         }
@@ -1042,39 +1506,17 @@ namespace Oxide.Plugins
             if (permission.UserHasPermission(ID.ToString(), NoobPerm)) return true;
             var outDouble = 0d;
             if (!storedData.players.TryGetValue(ID, out outDouble) || outDouble == -50d) return false;
-            if (outDouble < config.ProtectionTime || outDouble == -25d) return true;
+            if (outDouble < config.Main.ProtectionTime || outDouble == -25d) return true;
             return false;
         }
 
         private void RemoveCD(List<BasePlayer> List, BasePlayer player, float time = 0.1f)
         {
             if (player == null) return;
-            timer.Once(time, () => {
+            timer.Once(time, () =>
+            {
                 if (List.Contains(player)) List.Remove(player);
             });
-        }
-
-        private void RemoveClanP(ulong ID)
-        {
-            if (ID == 0u) return;
-
-            string clan = string.Empty;
-            var claninfo = ClanInfo.GetClanOf(ID);
-
-            if (claninfo != null) clan = claninfo.clanName;
-            else clan = Clans?.Call<string>("GetClanOf", ID) ?? string.Empty;
-
-            if (string.IsNullOrEmpty(clan)) return;
-
-            var ClanMembers = ClanInfo.FindClanByName(clan)?.members ?? new List<ulong>();
-            if (ClanMembers.Count < 1) return;
-
-            var list = storedData.players.Where(x => x.Value != -50d && ClanMembers.Contains(x.Key));
-            if (list.Count() < 1) return;
-
-            foreach (var member in list) storedData.players[member.Key] = -50d;
-            Puts(lang.GetMessage("clan_lostnoob", this, null), clan);
-            if (config.EnableLogging) LogToFile("clanlostnoob", $"[{DateTime.Now}] - Clan '{claninfo.clanName}' lost their noob status because {ID} tried to raid", this, false);
         }
 
         private void RemoveInactive()
@@ -1086,10 +1528,10 @@ namespace Oxide.Plugins
                 if (val == -50d) continue;
                 var tp = DateTime.Now.Subtract(Convert.ToDateTime(entry.Value));
 
-                if (tp.TotalDays > config.InactivityRemove)
+                if (tp.TotalDays > config.Main.InactivityRemove)
                 {
-                    Puts(lang.GetMessage("console_lostnoobstatus", this, null), entry.Key, config.InactivityRemove);
-                    if (config.EnableLogging) LogToFile("inactive", $"[{DateTime.Now}] - {entry.Key} hasn't connected for {config.InactivityRemove} days so he lost his noob status", this, false);
+                    Puts(lang.GetMessage("console_lostnoobstatus", this, null), entry.Key, config.Main.InactivityRemove);
+                    if (config.Advance.EnableLogging) LogToFile("inactive", $"[{DateTime.Now}] - {entry.Key} hasn't connected for {config.Main.InactivityRemove} days so he lost his noob status", this, false);
                     storedData.players[entry.Key] = -50d;
                 }
             }
@@ -1097,24 +1539,24 @@ namespace Oxide.Plugins
 
         private void Refund(BasePlayer attacker, string name, BaseEntity ent)
         {
-            if (!config.Refund || storedDataItemList.ItemList.Count < 1) return;
-
+            if (!config.Refund.RefundItem || storedDataItemList.ItemList.Count < 1) return;
+            
             foreach (var entry in storedDataItemList.ItemList)
             {
                 if (name == entry.Value)
                 {
-                    if (config.RefundTimes == 0)
+                    if (config.Refund.RefundTimes == 0)
                     {
                         Item item = ItemManager.CreateByName(entry.Key, 1);
                         attacker.GiveItem(item);
                         SendReply(attacker, lang.GetMessage("refund_free", this, attacker.UserIDString), item.info.displayName.english);
-                        if (config.EnableLogging) LogToFile("refund", $"[{DateTime.Now}] - {attacker.UserIDString} was refunded {item.info.displayName.english}", this, false);
+                        if (config.Advance.EnableLogging) LogToFile("refund", $"[{DateTime.Now}] - {attacker.UserIDString} was refunded {item.info.displayName.english}", this, false);
                         return;
                     }
 
-                    if ((storedData.AttackAttempts[attacker.userID]) <= config.RefundTimes)
+                    if (storedData.AttackAttempts[attacker.userID] <= config.Refund.RefundTimes)
                     {
-                        int a = config.RefundTimes - (storedData.AttackAttempts[attacker.userID]);
+                        int a = config.Refund.RefundTimes - (storedData.AttackAttempts[attacker.userID]);
                         Item item = ItemManager.CreateByName(entry.Key, 1);
                         attacker.GiveItem(item);
 
@@ -1123,7 +1565,7 @@ namespace Oxide.Plugins
                             case 0:
                                 {
                                     SendReply(attacker, lang.GetMessage("refund_last", this, attacker.UserIDString), item.info.displayName.english);
-                                    if (config.EnableLogging) LogToFile("refund", $"[{DateTime.Now}] - {attacker.UserIDString} was refunded {item.info.displayName.english} but will not be next time", this, false);
+                                    if (config.Advance.EnableLogging) LogToFile("refund", $"[{DateTime.Now}] - {attacker.UserIDString} was refunded {item.info.displayName.english} but will not be next time", this, false);
 
                                     return;
                                 }
@@ -1131,14 +1573,14 @@ namespace Oxide.Plugins
                             case 1:
                                 {
                                     SendReply(attacker, lang.GetMessage("refund_1time", this, attacker.UserIDString), item.info.displayName.english);
-                                    if (config.EnableLogging) LogToFile("refund", $"[{DateTime.Now}] - {attacker.UserIDString} was refunded {item.info.displayName.english} but after 1 more attempt it wont be refunded", this, false);
+                                    if (config.Advance.EnableLogging) LogToFile("refund", $"[{DateTime.Now}] - {attacker.UserIDString} was refunded {item.info.displayName.english} but after 1 more attempt it wont be refunded", this, false);
                                     return;
                                 }
 
                             default:
                                 {
                                     SendReply(attacker, lang.GetMessage("refund_nTimes", this, attacker.UserIDString), item.info.displayName.english, a);
-                                    if (config.EnableLogging) LogToFile("refund", $"[{DateTime.Now}] - {attacker.UserIDString} was refunded {item.info.displayName.english} but after {a} more attempts it wont be refunded", this, false);
+                                    if (config.Advance.EnableLogging) LogToFile("refund", $"[{DateTime.Now}] - {attacker.UserIDString} was refunded {item.info.displayName.english} but after {a} more attempts it wont be refunded", this, false);
 
                                     return;
                                 }
@@ -1151,7 +1593,8 @@ namespace Oxide.Plugins
 
         private void StartChecking()
         {
-            timer.Every(config.Frequency, () => {
+            timer.Every(config.Advance.Frequency, () =>
+            {
                 RemoveInactive();
                 Check();
             });
@@ -1162,6 +1605,7 @@ namespace Oxide.Plugins
         private Dictionary<string, string> AdminCommands = new Dictionary<string, string>
         {
             { "antinoob", "AntiNoobCommand" },
+            { "checkname", "CheckEntityNameCmd" },
             { "refunditem", "RefundCmd" }
         };
 
@@ -1306,7 +1750,14 @@ namespace Oxide.Plugins
                 return;
             }
 
-            ulong owner = config.CheckFullOwnership ? FullOwner(hitEnt) : hitEnt.OwnerID;
+            if (config.Messages.ShowMessage && config.Other.IgnoreTwig && (hitEnt as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs)
+            {
+                SendReply(player, lang.GetMessage("twig_can_attack", this, player.UserIDString));
+                return;
+            }
+
+            ulong owner = config.Other.CheckFullOwnership ? FullOwner(hitEnt) : hitEnt.OwnerID;
+
             if (owner == 0u || !storedData.players.ContainsKey(owner)) return;
             MessagePlayer(player, owner);
         }
@@ -1351,7 +1802,7 @@ namespace Oxide.Plugins
                         default:
                             {
                                 SendReply(player, "Time: " + tiem + " ('natural' time)");
-                                if (tiem >= config.ProtectionTime) SendReply(player, "Should be raidable");
+                                if (tiem >= config.Main.ProtectionTime) SendReply(player, "Should be raidable");
                                 else SendReply(player, "Shouldn't be raidable");
                                 break;
                             }
@@ -1367,6 +1818,25 @@ namespace Oxide.Plugins
             ent.SendNetworkUpdate();
             SendReply(player, "Set OwnerID: " + ent.OwnerID);
             return;
+        }
+
+        private void CheckEntityNameCmd(IPlayer p, string command, string[] args)
+        {
+            BasePlayer player = p.Object as BasePlayer;
+            BaseEntity hitEnt = GetLookAtEntity(player);
+            if (player == null) return;
+
+            if (hitEnt == null)
+            {
+                p.Reply(lang.GetMessage("notlooking_item", this, p.Id));
+                return;
+            }
+
+            if (hitEnt != null)
+            {
+                p.Reply(lang.GetMessage("looking_item", this, player.UserIDString), null, hitEnt);
+                return;
+            }
         }
 
         private void RefundCmd(IPlayer p, string command, string[] args)
@@ -1437,8 +1907,8 @@ namespace Oxide.Plugins
                 case "all":
                     {
                         foreach (var t in raidtools)
-                        
-                        if (!storedDataItemList.ItemList.ContainsKey(t.Key)) storedDataItemList.ItemList.Add(t.Key, t.Value);
+
+                            if (!storedDataItemList.ItemList.ContainsKey(t.Key)) storedDataItemList.ItemList.Add(t.Key, t.Value);
 
                         p.Reply(lang.GetMessage("refunditem_addedall", this, player.UserIDString));
 
@@ -1495,7 +1965,7 @@ namespace Oxide.Plugins
 }
 
 
-//  Copyright (C) <2021>  <RustySpoon>
+//  Copyright (C) <2021>  <MasterSplinter>
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
