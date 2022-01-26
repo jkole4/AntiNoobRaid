@@ -142,7 +142,7 @@ namespace Oxide.Plugins
         {
             [JsonProperty("List of entities that can be destroyed even if owner is noob, true = destroyable everywhere")]
             public Dictionary<string, string> AllowedEntities = AllowedEntitiesDictionary;
-            [JsonProperty("List of entities that can be destroyed without losing noob prtection, true = destroyable everywhere")]
+            [JsonProperty("List of entities that can be destroyed without losing noob protection, true = destroyable everywhere")]
             public Dictionary<string, string> AllowedEntitiesNoob = AllowedEntitiesNoobDictionary;
 
             public static Dictionary<string, string> AllowedEntitiesDictionary = new Dictionary<string, string>
