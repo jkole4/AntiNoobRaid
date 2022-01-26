@@ -1,7 +1,7 @@
 # Introduction
-Anti Noob Raid prevents doing damage to entities placed by a new player.
+Anti Noob Raid prevents doing damage to entities placed by a new player for a certian amount of time.
 For this plugin to work, Playtime Tracker is needed to monitor how long players are on the server.
-Time period inside which players cannot get raided is configurable in config file, by default it is 43200 (seconds).
+Time period inside which players cannot get raided is configurable in the config file, by default it is 43200 (seconds).
 
 ## Permissions
 
@@ -11,7 +11,7 @@ To assign a permission, use oxide.grant <user or group> <name or steam id> <perm
 To remove a permission, use oxide.revoke <user or group> <name or steam id> <permission>.
 ```
 
-antinoobraid.admin - gives player permission to command /refunditem
+antinoobraid.admin - gives player permission to command /refunditem & /checkname
 
 antinoobraid.noob - gives player permanent noob protection status
 
@@ -27,6 +27,8 @@ antinoobraid.noob - gives player permanent noob protection status
 /refunditem clear - clears the list of items set to refund
 
 /refunditem all - sets all raid tools to get refunded (C4, satchel, beancan, f1 and all 2 types of rockets (hv & normal))
+
+/checkname - check a deployed item and get its name for "Entity Settings"
 
 ### Players
 
@@ -44,11 +46,28 @@ antinoobraid.noob - gives player permanent noob protection status
 
 (/) antinoob addnoob [SteamID] - makes the player noob (use this in case you notice player is really... noob...)
 
-## Entity Whitelist
+## Entity Settings
 
-In config file there are already 5 placeholder for entity whitelist, to add an entity to the list you need to replace the Placeholder with the short prefab of the entity you want to whitelist, you can find that by typing debug.lookingat in client console ("Ent: sleepingbag_leather_deployed").
+In the config file there are already some items in both list for example's. Too add an entity to one of the list you need to add the short prefab name of the entity you want to add to the list, you can find that by typing debug.lookingat in client console or /checkname (Should look something like this "sleepingbag_leather_deployed").
 
-If you want to make the entity destroyable everywhere around the world you set the true/false property to true and if you want the entity to be destroyable when it's outside of TC range and owner of entity is not authorized to the TC set it to false.
+This will make the entity destroyable everywhere around the world by everyone. If you want an item to be destroyable but not if the player is new check out `Notes` below
+
+## Notes
+For infinite refunding set the `"Refunds before player starts losing explosives"` to zero.
+
+For `"Refund explosives"` to work you need to set `"Remove noob status of a raider on raid attempt"` to false
+
+`"Kill fireballs when someone tries to raid protected player with fire"` won't kill fireballs from Explosive Ammo & Incendiary Ammo as the hitinfo.InitiatorPlayer is Returning nothing with fire created with those items
+
+If using `"Anti Ladder and Twig"` you can disable `"Ignore twig when calculating base ownership (prevents exploiting)"` option to protect Twig as that plugin prevents the exploit with Twig
+
+ Fire produced by Explosive Ammo & Incendiary Ammo from Team/Clan members won't damage Team/Clan structures if protected. This is due to the hitinfo.InitiatorPlayer returning nothing with the fire. the Bullet Damage & Explosive Damage will still damage.
+ 
+ `"List of entities that can be destroyed without losing noob prtection, true = destroyable everywhere"` This option was added so noobs can destroy Certian Items if desired without losing protection. Best to add Storage Containers here As it will allow noobs to destory boxes in Decaying Bases but wont allow other player's to destroy theres
+ 
+ `"Show time until raidable only to owners"` This Will Allow The Base Owner To Check There Protection Time on Only There Base! Clan/Team member will also be able Too if enabled
+
+`"Save data on Server Save"` If disabled it will save every 60 seconds or what is in `"Save interval (seconds)"`
 
 ## Configuration
 
@@ -59,44 +78,55 @@ The use of a JSON editor or validation site such as jsonlint.com is recommended 
 
 ```json
 {
-  "Allow clan members to destroy each others entities (Rust:IO Clans)": true,
-  "Allow team members to destroy each others entities": true,
-  "Allow Patrol Helicopter to damage noob structures (This will allow players to raid with Patrol Helicopter)": true,
-  "Allow twig to be destroyed even when owner is noob": false,
-  "Ignore twig when calculating base ownership (prevents exploiting)": true,
-  "Check full ownership of the base instead of only one block": true,
-  "Kill fireballs when someone tries to raid protected player with fire (prevents lag)": true,
-  "Time (seconds) after which noob will lose protection (in-game time)": 43200,
-  "Days of inactivity after which player will be raidable": 3.0,
-  "Notify player on first connection with protection time": true,
-  "Use game tips to send first connection message to players": true,
-  "Show message for not being able to raid": true,
-  "Show time until raidable": false,
-  "Prevent new players from raiding": true,
-  "Remove protection from all team members when a member tries to raid": true,
-  "Remove protection from all clan members when a member tries to raid": false,
-  "Remove noob status of a raider on raid attempt": true,
-  "Remove noob status of a raider who is manually marked as a noob on raid attempt": true,
-  "Refund explosives": true,
-  "Refunds before player starts losing explosives": 4,
-  "List of entities that can be destroyed even if owner is a noob, true = destroyable everywhere (not inside of owners TC range)": {
-    "Placeholder1": true,
-    "Placeholder2": true,
-    "Placeholder3": true,
-    "Placeholder4": true,
-    "Placeholder5": true
+  "Main Settings": {
+    "Time (seconds) after which noob will lose protection (in-game time)": 43200,
+    "Days of inactivity after which player will be raidable": 3.0,
+    "Remove noob status of a raider on raid attempt": true,
+    "Remove noob status of a raider who is manually marked as a noob on raid attempt": true
   },
-  "User data refresh interval (seconds)": 30,
-  "Show structure has no owner in console": false,
-  "Enable Logs (logs can be found in /oxide/logs/antinoobraid)": true
+  "Other Settings": {
+    "Allow Patrol Helicopter to damage noob structures (This will allow players to raid noobs with Patrol Helicopter)": true,
+    "Ignore twig when calculating base ownership (prevents exploiting)": true,
+    "Check full ownership of the base instead of only one block": true,
+    "Kill fireballs when someone tries to raid protected player with fire (prevents lag)": true
+  },
+  "Team & Clan Settings": {
+    "Enable 'Clan' Support (Allow clan members to destroy each others entities & Remove protection from clan members when a member tries to raid)": true,
+    "Enable 'Team' Support (Allow team members to destroy each others entities & Remove protection from team members when a member tries to raid)": true
+  },
+  "Refund Settings": {
+    "Refund explosives": true,
+    "Refunds before player starts losing explosives": 4
+  },
+  "Manage Messages": {
+    "Notify player on first connection with protection time": true,
+    "Use game tips to send first connection message & lost protection to players": false,
+    "Show message for not being able to raid": true,
+    "Show time until raidable": false,
+    "Show time until raidable only to owners": true
+  },
+  "Entity Settings": {
+    "List of entities that can be destroyed even if owner is noob, true = destroyable everywhere": {
+      "ShortPrefabName": "Common Name",
+      "beartrap": "Snap Trap",
+      "landmine": "Landmine"
+    },
+    "List of entities that can be destroyed without losing noob prtection, true = destroyable everywhere": {
+      "ShortPrefabName": "Common Name",
+      "campfire": "Camp Fire"
+    }
+  },
+  "Advance Settings": {
+    "User data refresh interval (seconds)": 30,
+    "Save interval (seconds)": 60,
+    "Save data on Server Save": true,
+    "Show structure has no owner in console": false,
+    "Enable Logs (Logs can be found in /oxide/logs/antinoobraid)": true
+  }
 }
 
 ```
 
-## Notes
-For infinite refunding set the "Refunds before player starts losing explosives to zero.
-
-For `"Refund explosives"` to work you need to set `"Remove noob status of a raider on raid attempt"` to false
 ## API
 # IgnorePlayer 
 
