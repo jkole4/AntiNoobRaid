@@ -21,7 +21,7 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "MasterSplinter", "2.0.0", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "MasterSplinter", "2.0.1", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, Clans;
