@@ -21,14 +21,14 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "MasterSplinter", "2.0.1", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "MasterSplinter", "2.0.2", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, Clans;
 
         //set this to true if you are having issues with the plugin
         private bool debug = false;
-        private string debugversion = "0.2.9";
+        private string debugversion = "0.0.7";
 
         private List<BasePlayer> cooldown = new List<BasePlayer>();
         private List<BasePlayer> MessageCooldown = new List<BasePlayer>();
@@ -54,7 +54,11 @@ namespace Oxide.Plugins
             {"ammo.shotgun", "shotgunbullet" },
             {"ammo.shotgun.fire", "shotgunbullet_fire" },
             {"ammo.shotgun.slug", "shotgunslug" },
-            {"ammo.rocket.mlrs", "rocket_mlrs"}
+            {"ammo.rocket.mlrs", "rocket_mlrs"},
+            {"arrow.wooden", "arrow_wooden"},
+            {"arrow.hv", "arrow_hv"},
+            {"arrow.fire", "arrow_fire"},
+            {"arrow.bone", "arrow_bone"},
         };
 
         private int layers = LayerMask.GetMask("Construction", "Deployed");
@@ -451,7 +455,7 @@ namespace Oxide.Plugins
 
             if (dmgType == DamageType.Decay || dmgType == DamageType.Generic || dmgType == DamageType.Bite) return null;
 
-            if (entity.OwnerID == 0u || !(entity is BuildingBlock || entity is Door || entity.PrefabName.Contains("deployable") || entity.PrefabName.Contains("turret"))) return null;
+            if (entity.OwnerID == 0u || CheckForBuildingOrDeployable(entity, hitinfo) == false) return null;
 
             if (config.Other.IgnoreTwig && (entity as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs) return null;
 
@@ -544,6 +548,11 @@ namespace Oxide.Plugins
             RemoveCD(cooldown, attacker);
             LogPlayer(attacker);
 
+            if (!string.IsNullOrEmpty(name) && config.Main.UnNoobNew)
+            {
+                RemoveProtection(attacker, hitinfo);
+            }
+
             if (PlayerIsNew(owner))
             {
                 //keep in mind, antinoobraid.noob perm doesn't get removed
@@ -553,27 +562,6 @@ namespace Oxide.Plugins
                 hitinfo.damageTypes.ScaleAll(0f);
                 NextTick(() => {
                     //if player was *manually* set to noob we don't remove his protection on raid attempt
-                    if (config.Main.UnNoobNew)
-                    {
-                        if (storedData.players[attacker.userID] >= 0 || (storedData.players[attacker.userID] == -25d && config.Main.UnNoobManual))
-                        {
-                            storedData.players[attacker.userID] = -50d;
-
-                            string msg = string.Format(lang.GetMessage("new_user_lostprotection", this, attacker.UserIDString));
-
-                            if (config.Messages.UseGT)
-                            {
-                                attacker.SendConsoleCommand("gametip.showgametip", msg);
-                                timer.Once(10f, () => attacker.SendConsoleCommand("gametip.hidegametip"));
-                            }
-                            else
-                            {
-                                SendReply(attacker, msg);
-                            }
-
-                            if (config.Advance.EnableLogging) LogToFile("damagedstructure", $"[{DateTime.Now}] - {attacker.userID} lost there noob protection for damaging {entity.OwnerID} structure", this, false);
-                        }
-                    }
                     MessagePlayer(attacker, owner);
                     Refund(attacker, name, entity);
 
@@ -912,32 +900,29 @@ namespace Oxide.Plugins
             //Remove protection from whole team
             if (config.Main.UnNoobNew)
             {
-                if (!string.IsNullOrEmpty(name))
+                if (attacker.currentTeam != 0)
                 {
-                    if (attacker.currentTeam != 0)
+                    if (storedData.players[attacker.userID] >= 0)
                     {
-                        if (storedData.players[attacker.userID] >= 0)
+                        string msg = string.Format(lang.GetMessage("lost_teamsprotection", this, attacker.UserIDString));
+
+                        if (config.Messages.UseGT)
                         {
-                            string msg = string.Format(lang.GetMessage("lost_teamsprotection", this, attacker.UserIDString));
-
-                            if (config.Messages.UseGT)
-                            {
-                                attacker.SendConsoleCommand("gametip.showgametip", msg);
-                                timer.Once(10f, () => attacker.SendConsoleCommand("gametip.hidegametip"));
-                            }
-                            else
-                            {
-                                SendReply(attacker, msg);
-                            }
-
-                            MessagePlayer(attacker, owner);
-                            if (config.Advance.EnableLogging) LogToFile($"TeamLostNoob", $"[{DateTime.Now}] - {attacker} lost their team noob status.", this, false);
-
+                            attacker.SendConsoleCommand("gametip.showgametip", msg);
+                            timer.Once(10f, () => attacker.SendConsoleCommand("gametip.hidegametip"));
+                        }
+                        else
+                        {
+                            SendReply(attacker, msg);
                         }
 
-                        var team = RelationshipManager.ServerInstance?.teams[attacker.currentTeam];
-                        foreach (var member in team.members) storedData.players[member] = -50d;
+                        MessagePlayer(attacker, owner);
+                        if (config.Advance.EnableLogging) LogToFile($"TeamLostNoob", $"[{DateTime.Now}] - {attacker} lost their team noob status.", this, false);
+
                     }
+
+                    var team = RelationshipManager.ServerInstance?.teams[attacker.currentTeam];
+                    foreach (var member in team.members) storedData.players[member] = -50d;
                 }
             }
         }
@@ -1036,6 +1021,41 @@ namespace Oxide.Plugins
             if (storedData.playersWithNoData.Contains(ID)) return;
             if (storedData.players[ID] == -50d || storedData.players[ID] == -25d) return;
             APICall(ID);
+        }
+
+        private bool CheckForBuildingOrDeployable(BaseCombatEntity entity, HitInfo hitinfo)
+        {
+            var dmgType = hitinfo?.damageTypes?.GetMajorityDamageType() ?? DamageType.Generic;
+            var owner = config.Other.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
+            BasePlayer attacker = hitinfo.InitiatorPlayer;
+
+            if (dmgType == DamageType.Decay || dmgType == DamageType.Generic || dmgType == DamageType.Bite) return false;
+
+            if (attacker == null || owner == 0u) return false;
+
+            if (entity is BuildingBlock || entity is Door) return true;
+            if (entity.PrefabName.Contains("deployable")) return true;
+            if (entity.PrefabName.Contains("window")) return true;
+            if (entity.PrefabName.Contains("grill")) return true;
+            if (entity.PrefabName.Contains("turret")) return true;
+            if (entity.PrefabName.Contains("wall.external")) return true;
+            if (entity.PrefabName.Contains("solarpanel")) return true;
+            if (entity.PrefabName.Contains("electrical")) return true;
+            if (entity.PrefabName.Contains("furnace")) return true;
+            if (entity.PrefabName.Contains("box")) return true;
+            if (entity.PrefabName.Contains("frame.cell")) return true;
+            if (entity.PrefabName.Contains("shutter")) return true;
+            if (entity.PrefabName.Contains("ladder")) return true;
+            if (entity.PrefabName.Contains("water_catcher")) return true;
+            if (entity.PrefabName.Contains("sign")) return true;
+            if (entity.PrefabName.Contains("switch")) return true;
+            if (entity.PrefabName.Contains("smart")) return true;
+            if (entity.PrefabName.Contains("netting")) return true;
+            if (entity.PrefabName.Contains("fence")) return true;
+            if (entity.PrefabName.Contains("generator")) return true;
+            if (entity.PrefabName.Contains("watchtower")) return true;
+
+            return false;
         }
 
         private bool CheckForHelicopterOrMLRS(BaseCombatEntity entity, HitInfo hitinfo)
@@ -1146,7 +1166,30 @@ namespace Oxide.Plugins
             || hitinfo?.WeaponPrefab?.ShortPrefabName == "explosive.satchel.deployed"
             || hitinfo?.WeaponPrefab?.ShortPrefabName == "grenade.beancan.deployed"
             || hitinfo?.WeaponPrefab?.ShortPrefabName == "grenade.f1.deployed"
-            || hitinfo?.WeaponPrefab?.ShortPrefabName == "40mm_grenade_he")
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "40mm_grenade_he"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "spear_stone.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "spear_wooden.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "knife_bone.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "bone_club.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "butcherknife.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "machete.weapon"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "knife.combat.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "longsword.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "mace.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "paddle.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "pitchfork.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "salvaged_cleaver.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "salvaged_sword.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "hatchet.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "pickaxe.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "axe_salvaged.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "hammer_salvaged.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "icepick_salvaged.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "stonehatchet.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "stone_pickaxe.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "rock.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "skull.entity"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "jackhammer.entity")
             {
                 name = hitinfo?.WeaponPrefab?.ShortPrefabName;
             }
@@ -1517,6 +1560,30 @@ namespace Oxide.Plugins
             {
                 if (List.Contains(player)) List.Remove(player);
             });
+        }
+
+        private void RemoveProtection(BaseCombatEntity entity, HitInfo hitinfo)
+        {
+            BasePlayer attacker = hitinfo.InitiatorPlayer;
+
+            if (storedData.players[attacker.userID] >= 0 || (storedData.players[attacker.userID] == -25d && config.Main.UnNoobManual))
+            {
+                storedData.players[attacker.userID] = -50d;
+
+                string msg = string.Format(lang.GetMessage("new_user_lostprotection", this, attacker.UserIDString));
+
+                if (config.Messages.UseGT)
+                {
+                    attacker.SendConsoleCommand("gametip.showgametip", msg);
+                    timer.Once(10f, () => attacker.SendConsoleCommand("gametip.hidegametip"));
+                }
+                else
+                {
+                    SendReply(attacker, msg);
+                }
+
+                if (config.Advance.EnableLogging) LogToFile("damagedstructure", $"[{DateTime.Now}] - {attacker.userID} lost there noob protection for damaging {entity.OwnerID} structure", this, false);
+            }
         }
 
         private void RemoveInactive()
