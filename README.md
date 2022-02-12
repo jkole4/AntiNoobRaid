@@ -28,7 +28,9 @@ antinoobraid.noob - gives player permanent noob protection status
 
 /refunditem all - sets all raid tools to get refunded (C4, satchel, beancan, f1 and all 2 types of rockets (hv & normal))
 
-/checkname - check a deployed item and get its name for "Entity Settings"
+/checkname looking - check a deployed item and get its name for "Entity Settings"
+
+/checkname holding - check the weapon your holding and get its name for "Weapon Settings"
 
 ### Players
 
@@ -48,9 +50,13 @@ antinoobraid.noob - gives player permanent noob protection status
 
 ## Entity Settings
 
-In the config file there are already some items in both list for example's. Too add an entity to one of the list you need to add the short prefab name of the entity you want to add to the list, you can find that by typing debug.lookingat in client console or /checkname (Should look something like this "sleepingbag_leather_deployed").
+In the config file there are already some items in both list for example's. Too add an entity to one of the list you need to add the short prefab name of the entity you want to add to the list, you can find that by typing debug.lookingat in client console or /checkname looking (Should look something like this "sleepingbag_leather_deployed").
 
 This will make the entity destroyable everywhere around the world by everyone. If you want an item to be destroyable but not if the player is new check out `Notes` below
+
+## Weapon Settings
+
+In the config file there is already a item in the list for a example. Too add an weapon to the list you need to add the short prefab name of the weapon you want to add to the list, you can find that by typing /checkname holding in chat while holding the weapon (Should look something like this "rocket_smoke").
 
 ## Notes
 For infinite refunding set the `"Refunds before player starts losing explosives"` to zero.
@@ -116,6 +122,12 @@ The use of a JSON editor or validation site such as jsonlint.com is recommended 
       "campfire": "Camp Fire"
     }
   },
+    "Weapon Settings": {
+    "List of Weapons/Tools that won't trigger player to lose noob protection": {
+      "ShortPrefabName": "Common Name",
+      "rocket_smoke": "Smoke Rocket WIP!!!!"
+    }
+  },
   "Advance Settings": {
     "User data refresh interval (seconds)": 30,
     "Save interval (seconds)": 60,
@@ -150,4 +162,3 @@ Example: `AntiNoobRaid.Call("UnIgnorePlayer", "71661298069130333");`
 Returns true if user was successfully removed from ignore list and false if not
 
 Accepts: BasePlayer, ulong & string
-
