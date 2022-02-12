@@ -21,7 +21,7 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "MasterSplinter", "2.0.2", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "MasterSplinter", "2.0.3", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, Clans;
@@ -40,12 +40,13 @@ namespace Oxide.Plugins
             {"ammo.rocket.fire", "rocket_fire" },
             {"ammo.rocket.hv", "rocket_hv" },
             {"ammo.rocket.basic", "rocket_basic" },
+            {"ammo.rocket.smoke", "rocket_smoke" },
             {"explosive.timed", "explosive.timed.deployed" },
             {"surveycharge", "survey_charge.deployed" },
             {"explosive.satchel", "explosive.satchel.deployed" },
             {"grenade.beancan", "grenade.beancan.deployed" },
             {"grenade.f1", "grenade.f1.deployed" },
-            {"ammo.grenadelauncher.he", "40mm_grenade_he"},
+            {"ammo.grenadelauncher.he", "40mm_grenade_he" },
             {"ammo.rifle", "riflebullet" },
             {"ammo.rifle.explosive", "riflebullet_explosive" },
             {"ammo.rifle.incendiary", "riflebullet_fire" },
@@ -54,11 +55,60 @@ namespace Oxide.Plugins
             {"ammo.shotgun", "shotgunbullet" },
             {"ammo.shotgun.fire", "shotgunbullet_fire" },
             {"ammo.shotgun.slug", "shotgunslug" },
-            {"ammo.rocket.mlrs", "rocket_mlrs"},
-            {"arrow.wooden", "arrow_wooden"},
-            {"arrow.hv", "arrow_hv"},
-            {"arrow.fire", "arrow_fire"},
-            {"arrow.bone", "arrow_bone"},
+            {"ammo.rocket.mlrs", "rocket_mlrs" },
+            {"arrow.wooden", "arrow_wooden" },
+            {"arrow.hv", "arrow_hv" },
+            {"arrow.fire", "arrow_fire" },
+            {"arrow.bone", "arrow_bone" }
+        };
+        private Dictionary<string, string> RaidToolsCheck = new Dictionary<string, string>
+        {
+            {"ammo.rocket.fire", "rocket_fire" },
+            {"ammo.rocket.hv", "rocket_hv" },
+            {"ammo.rocket.basic", "rocket_basic" },
+            {"ammo.rocket.smoke", "rocket_smoke" },
+            {"explosive.timed", "explosive.timed.deployed" },
+            {"surveycharge", "survey_charge.deployed" },
+            {"explosive.satchel", "explosive.satchel.deployed" },
+            {"grenade.beancan", "grenade.beancan.deployed" },
+            {"grenade.f1", "grenade.f1.deployed" },
+            {"ammo.grenadelauncher.he", "40mm_grenade_he" },
+            {"ammo.rifle", "riflebullet" },
+            {"ammo.rifle.explosive", "riflebullet_explosive" },
+            {"ammo.rifle.incendiary", "riflebullet_fire" },
+            {"ammo.pistol", "pistolbullet" },
+            {"ammo.pistol.fire", "pistolbullet_fire" },
+            {"ammo.shotgun", "shotgunbullet" },
+            {"ammo.shotgun.fire", "shotgunbullet_fire" },
+            {"ammo.shotgun.slug", "shotgunslug" },
+            {"ammo.rocket.mlrs", "rocket_mlrs" },
+            {"arrow.wooden", "arrow_wooden" },
+            {"arrow.hv", "arrow_hv" },
+            {"arrow.fire", "arrow_fire" },
+            {"arrow.bone", "arrow_bone" },
+            {"spear.stone","spear_stone.entity" },
+            {"spear.wooden", "spear_wooden.entity" },
+            {"knife.bone", "knife_bone.entity" },
+            {"bone.club", "bone_club.entity" },
+            {"knife.butcher", "butcherknife.entity" },
+            {"machete", "machete.weapon" },
+            {"knife.combat", "knife.combat.entity" },
+            {"longsword", "longsword.entity" },
+            {"mace", "mace.entity" },
+            {"paddle", "paddle.entity" },
+            {"pitchfork", "pitchfork.entity" },
+            {"salvaged.cleaver", "salvaged_cleaver.entity" },
+            {"salvaged.sword", "salvaged_sword.entity" },
+            {"hatchet", "hatchet.entity" },
+            {"pickaxe", "pickaxe.entity" },
+            {"axe.salvaged", "axe_salvaged.entity" },
+            {"hammer.salvaged", "hammer_salvaged.entity" },
+            {"icepick.salvaged", "icepick_salvaged.entity" },
+            {"stonehatchet", "stonehatchet.entity" },
+            {"stone.pickaxe", "stone_pickaxe.entity" },
+            {"rock", "rock.entity" },
+            {"skull", "skull.entity" },
+            {"jackhammer", "jackhammer.entity" }
         };
 
         private int layers = LayerMask.GetMask("Construction", "Deployed");
@@ -81,6 +131,8 @@ namespace Oxide.Plugins
             public ManageMessages Messages = new ManageMessages();
             [JsonProperty(PropertyName = "Entity Settings")]
             public EntitySettings Entity = new EntitySettings();
+            [JsonProperty(PropertyName = "Weapon Settings")]
+            public WeaponSettings RaidTools = new WeaponSettings();
             [JsonProperty(PropertyName = "Advance Settings")]
             public AdvanceSettings Advance = new AdvanceSettings();
 
@@ -156,6 +208,17 @@ namespace Oxide.Plugins
             public static Dictionary<string, string> AllowedEntitiesNoobDictionary = new Dictionary<string, string>
             {
                 {"ShortPrefabName", "Common Name"}, {"campfire", "Camp Fire"},
+            };
+        }
+
+        public class WeaponSettings
+        {
+            [JsonProperty("List of Weapons/Tools that won't trigger player to lose noob protection")]
+            public Dictionary<string, string> AllowedRaidTools = AllowedRaidToolsDictionary;
+
+            public static Dictionary<string, string> AllowedRaidToolsDictionary = new Dictionary<string, string>
+            {
+                {"ShortPrefabName", "Common Name"}, {"rocket_smoke", "Smoke Rocket WIP!!!!"},
             };
         }
 
@@ -250,6 +313,8 @@ namespace Oxide.Plugins
                 {"cannot_attack_time", "This entity cannot be destroyed because it was built by a new player ({0})"},
                 {"looking_item", "The entity name is {0}"},
                 {"notlooking_item", "You need to look at a deployed item to get the name!"},
+                {"holding_item", "The items name is {0}"},
+                {"notholding_item", "You need to hold a Raiding Tool to get the name!"},
 
                 {"secs", " seconds"},
                 {"mins", " minutes"},
@@ -459,6 +524,24 @@ namespace Oxide.Plugins
 
             if (config.Other.IgnoreTwig && (entity as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs) return null;
 
+            if (config.RaidTools.AllowedRaidTools.ContainsKey(name))
+            {
+                if (PlayerIsNew(owner))
+                {
+                    //keep in mind, antinoobraid.noob perm doesn't get removed
+                    hitinfo.damageTypes = new DamageTypeList();
+                    hitinfo.DoHitEffects = false;
+                    hitinfo.HitMaterial = 0;
+                    hitinfo.damageTypes.ScaleAll(0f);
+                    NextTick(() => {
+                        MessagePlayer(attacker, owner);
+                        Refund(attacker, name, entity);
+
+                    });
+                    return true;
+                }
+            }
+
             if (CheckForHelicopterOrMLRS(entity, hitinfo) == true) return null;
 
             if (ExplosiveAmmoFix(entity, hitinfo) == true) return null;
@@ -548,10 +631,7 @@ namespace Oxide.Plugins
             RemoveCD(cooldown, attacker);
             LogPlayer(attacker);
 
-            if (!string.IsNullOrEmpty(name) && config.Main.UnNoobNew)
-            {
-                RemoveProtection(attacker, hitinfo);
-            }
+            RemoveProtection(attacker, hitinfo);
 
             if (PlayerIsNew(owner))
             {
@@ -1161,6 +1241,7 @@ namespace Oxide.Plugins
             || hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_mlrs"
             || hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_hv"
             || hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_basic"
+            || hitinfo?.WeaponPrefab?.ShortPrefabName == "rocket_smoke"
             || hitinfo?.WeaponPrefab?.ShortPrefabName == "explosive.timed.deployed"
             || hitinfo?.WeaponPrefab?.ShortPrefabName == "survey_charge.deployed"
             || hitinfo?.WeaponPrefab?.ShortPrefabName == "explosive.satchel.deployed"
@@ -1338,28 +1419,7 @@ namespace Oxide.Plugins
                     hitinfo.damageTypes.ScaleAll(0f);
                     NextTick(() =>
                     {
-                        //if player was *manually* set to noob we don't remove his protection on raid attempt
-                        if (config.Main.UnNoobNew)
-                        {
-                            if (storedData.players[attacker.userID] >= 0 || (storedData.players[attacker.userID] == -25d && config.Main.UnNoobManual))
-                            {
-                                storedData.players[attacker.userID] = -50d;
-
-                                string msg = string.Format(lang.GetMessage("new_user_lostprotection", this, attacker.UserIDString));
-
-                                if (config.Messages.UseGT)
-                                {
-                                    attacker.SendConsoleCommand("gametip.showgametip", msg);
-                                    timer.Once(10f, () => attacker.SendConsoleCommand("gametip.hidegametip"));
-                                }
-                                else
-                                {
-                                    SendReply(attacker, msg);
-                                }
-
-                                if (config.Advance.EnableLogging) LogToFile("damagedstructure", $"[{DateTime.Now}] - {attacker.userID} lost there noob protection for damaging {entity.OwnerID} structure", this, false);
-                            }
-                        }
+                        RemoveProtection(entity, hitinfo);
                         MessagePlayer(attacker, owner);
                         Refund(attacker, name, entity);
                     });
@@ -1566,23 +1626,48 @@ namespace Oxide.Plugins
         {
             BasePlayer attacker = hitinfo.InitiatorPlayer;
 
-            if (storedData.players[attacker.userID] >= 0 || (storedData.players[attacker.userID] == -25d && config.Main.UnNoobManual))
+            if (config.Main.UnNoobNew)
             {
-                storedData.players[attacker.userID] = -50d;
-
-                string msg = string.Format(lang.GetMessage("new_user_lostprotection", this, attacker.UserIDString));
-
-                if (config.Messages.UseGT)
+                if (storedData.players[attacker.userID] >= 0)
                 {
-                    attacker.SendConsoleCommand("gametip.showgametip", msg);
-                    timer.Once(10f, () => attacker.SendConsoleCommand("gametip.hidegametip"));
-                }
-                else
-                {
-                    SendReply(attacker, msg);
-                }
+                    storedData.players[attacker.userID] = -50d;
 
-                if (config.Advance.EnableLogging) LogToFile("damagedstructure", $"[{DateTime.Now}] - {attacker.userID} lost there noob protection for damaging {entity.OwnerID} structure", this, false);
+                    string msg = string.Format(lang.GetMessage("new_user_lostprotection", this, attacker.UserIDString));
+
+                    if (config.Messages.UseGT)
+                    {
+                        attacker.SendConsoleCommand("gametip.showgametip", msg);
+                        timer.Once(10f, () => attacker.SendConsoleCommand("gametip.hidegametip"));
+                    }
+                    else
+                    {
+                        SendReply(attacker, msg);
+                    }
+
+                    if (config.Advance.EnableLogging) LogToFile("damagedstructure", $"[{DateTime.Now}] - {attacker.userID} lost there noob protection for damaging {entity.OwnerID} structure", this, false);
+                }
+            }
+
+            if (config.Main.UnNoobManual)
+            {
+                if (storedData.players[attacker.userID] == -25d)
+                {
+                    storedData.players[attacker.userID] = -50d;
+
+                    string msg = string.Format(lang.GetMessage("new_user_lostprotection", this, attacker.UserIDString));
+
+                    if (config.Messages.UseGT)
+                    {
+                        attacker.SendConsoleCommand("gametip.showgametip", msg);
+                        timer.Once(10f, () => attacker.SendConsoleCommand("gametip.hidegametip"));
+                    }
+                    else
+                    {
+                        SendReply(attacker, msg);
+                    }
+
+                    if (config.Advance.EnableLogging) LogToFile("damagedstructure", $"[{DateTime.Now}] - {attacker.userID} lost there noob protection for damaging {entity.OwnerID} structure", this, false);
+                }
             }
         }
 
@@ -1672,8 +1757,8 @@ namespace Oxide.Plugins
         private Dictionary<string, string> AdminCommands = new Dictionary<string, string>
         {
             { "antinoob", "AntiNoobCommand" },
-            { "checkname", "CheckEntityNameCmd" },
-            { "refunditem", "RefundCmd" }
+            { "checkname", "CheckNameCmd" },
+            { "refunditem", "RefundCmd" },
         };
 
         private void AntiNoobCommand(IPlayer player, string command, string[] args)
@@ -1887,22 +1972,58 @@ namespace Oxide.Plugins
             return;
         }
 
-        private void CheckEntityNameCmd(IPlayer p, string command, string[] args)
+        private void CheckNameCmd(IPlayer p, string command, string[] args)
         {
             BasePlayer player = p.Object as BasePlayer;
             BaseEntity hitEnt = GetLookAtEntity(player);
+            Item helditem = player.GetActiveItem();
+
             if (player == null) return;
 
-            if (hitEnt == null)
+            if (args.Length < 1)
             {
-                p.Reply(lang.GetMessage("notlooking_item", this, p.Id));
                 return;
             }
 
-            if (hitEnt != null)
+            switch (args[0].ToLower())
             {
-                p.Reply(lang.GetMessage("looking_item", this, player.UserIDString), null, hitEnt);
-                return;
+                case "looking":
+                    {
+                        if (hitEnt == null)
+                        {
+                            p.Reply(lang.GetMessage("notlooking_item", this, p.Id));
+                            return;
+                        }
+
+                        if (hitEnt != null)
+                        {
+                            p.Reply(lang.GetMessage("looking_item", this, player.UserIDString), null, hitEnt);
+                            return;
+                        }
+
+                        return;
+                    }
+
+                case "holding":
+                    {
+                        if (helditem == null)
+                        {
+                            p.Reply(lang.GetMessage("notholding_item", this, p.Id));
+                            return;
+                        }
+
+                        if (RaidToolsCheck.ContainsKey(helditem.info.shortname))
+                        {
+                            p.Reply(lang.GetMessage("holding_item", this, player.UserIDString), null, raidtools[helditem.info.shortname]);
+                            return;
+                        }
+                        else
+
+                        {
+                            p.Reply(lang.GetMessage("notholding_item", this, p.Id));
+                            return;
+                        }
+                    }
             }
         }
 
