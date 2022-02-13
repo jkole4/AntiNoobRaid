@@ -73,7 +73,7 @@ If using `"Anti Ladder and Twig"` you can disable `"Ignore twig when calculating
  
  `"Show time until raidable only to owners"` This will allow the Base Owner to check there protection time on only there base! Clan/Team member will also be able Too if enabled
 
-`"List of Weapons/Tools that won't trigger player to lose noob protection"`  dose not support Explosive 5.56 Rifle Ammo, Incendiary 5.56 Rifle Ammo, Incendiary Pistol Bullet, 12 Gauge Incendiary Shell and Fire Arrow. This is due the fire / explosive part of the ammo returns null for some infomation needed.
+`"List of Weapons/Tools that won't trigger player to lose noob protection"`  dose not support Explosive 5.56 Rifle Ammo, Incendiary 5.56 Rifle Ammo, Incendiary Pistol Bullet, 12 Gauge Incendiary Shell and Fire Arrow. This is due the fire / explosive part of the ammo returning null for some infomation needed.
  
  `"Save data on Server Save"` If disabled it will save every 60 seconds or what is in `"Save interval (seconds)"`
  
