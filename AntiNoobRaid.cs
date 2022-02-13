@@ -21,14 +21,14 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "MasterSplinter", "2.0.3", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "MasterSplinter", "2.0.4", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, Clans;
 
         //set this to true if you are having issues with the plugin
         private bool debug = false;
-        private string debugversion = "0.0.7";
+        private string debugversion = "0.1.5";
 
         private List<BasePlayer> cooldown = new List<BasePlayer>();
         private List<BasePlayer> MessageCooldown = new List<BasePlayer>();
@@ -74,17 +74,12 @@ namespace Oxide.Plugins
             {"grenade.f1", "grenade.f1.deployed" },
             {"ammo.grenadelauncher.he", "40mm_grenade_he" },
             {"ammo.rifle", "riflebullet" },
-            {"ammo.rifle.explosive", "riflebullet_explosive" },
-            {"ammo.rifle.incendiary", "riflebullet_fire" },
             {"ammo.pistol", "pistolbullet" },
-            {"ammo.pistol.fire", "pistolbullet_fire" },
             {"ammo.shotgun", "shotgunbullet" },
-            {"ammo.shotgun.fire", "shotgunbullet_fire" },
             {"ammo.shotgun.slug", "shotgunslug" },
             {"ammo.rocket.mlrs", "rocket_mlrs" },
             {"arrow.wooden", "arrow_wooden" },
             {"arrow.hv", "arrow_hv" },
-            {"arrow.fire", "arrow_fire" },
             {"arrow.bone", "arrow_bone" },
             {"spear.stone","spear_stone.entity" },
             {"spear.wooden", "spear_wooden.entity" },
@@ -110,6 +105,15 @@ namespace Oxide.Plugins
             {"skull", "skull.entity" },
             {"jackhammer", "jackhammer.entity" }
         };
+        private Dictionary<string, string> NotSupportedRaidTools = new Dictionary<string, string>
+        {
+            {"ammo.rifle.explosive", "riflebullet_explosive" },
+            {"ammo.rifle.incendiary", "riflebullet_fire" },
+            {"ammo.pistol.fire", "pistolbullet_fire" },
+            {"ammo.shotgun.fire", "shotgunbullet_fire" },
+            {"arrow.fire", "arrow_fire" }
+        };
+
 
         private int layers = LayerMask.GetMask("Construction", "Deployed");
         private readonly string AdminPerm = "antinoobraid.admin";
@@ -315,6 +319,7 @@ namespace Oxide.Plugins
                 {"notlooking_item", "You need to look at a deployed item to get the name!"},
                 {"holding_item", "The items name is {0}"},
                 {"notholding_item", "You need to hold a Raiding Tool to get the name!"},
+                {"Not_Supported", "This Raiding Tool is not supported for \"Weapon Settings\"!"},
 
                 {"secs", " seconds"},
                 {"mins", " minutes"},
@@ -524,11 +529,14 @@ namespace Oxide.Plugins
 
             if (config.Other.IgnoreTwig && (entity as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs) return null;
 
+            if (CheckForHelicopterOrMLRS(entity, hitinfo) == true) return null;
+
+            if (ExplosiveAmmoFix(entity, hitinfo) == true) return null;
+
             if (config.RaidTools.AllowedRaidTools.ContainsKey(name))
             {
                 if (PlayerIsNew(owner))
                 {
-                    //keep in mind, antinoobraid.noob perm doesn't get removed
                     hitinfo.damageTypes = new DamageTypeList();
                     hitinfo.DoHitEffects = false;
                     hitinfo.HitMaterial = 0;
@@ -541,10 +549,6 @@ namespace Oxide.Plugins
                     return true;
                 }
             }
-
-            if (CheckForHelicopterOrMLRS(entity, hitinfo) == true) return null;
-
-            if (ExplosiveAmmoFix(entity, hitinfo) == true) return null;
 
             if (config.Entity.AllowedEntities.ContainsKey(entity.ShortPrefabName))
             {
@@ -615,7 +619,6 @@ namespace Oxide.Plugins
 
             if (cooldown.Contains(attacker))
             {
-                RemoveCD(cooldown, attacker);
                 if (PlayerIsNew(owner))
                 {
                     hitinfo.damageTypes = new DamageTypeList();
@@ -681,7 +684,7 @@ namespace Oxide.Plugins
                     {
                         MessagePlayer(player, entity.OwnerID);
                         MessageCooldown.Add(player);
-                        RemoveCD(MessageCooldown, player, 1f);
+                        RemoveCD(MessageCooldown, player);
                     }
                 }
 
@@ -1399,14 +1402,46 @@ namespace Oxide.Plugins
 
             if (name == "riflebullet_explosive" && owner != 0u && attacker != null && dmgType == DamageType.Bullet)
             {
-                if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false) return false;
-                if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
+                if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
+                {
+                    if (PlayerIsNew(owner))
+                    {
+                        hitinfo.damageTypes = new DamageTypeList();
+                        hitinfo.DoHitEffects = false;
+                        hitinfo.HitMaterial = 0;
+                        hitinfo.damageTypes.ScaleAll(0f);
+                        NextTick(() =>
+                        {
+                            RemoveProtection(entity, hitinfo);
+                            MessagePlayer(attacker, owner);
+                            Refund(attacker, name, entity);
+                        });
+                        return true;
+                    }
+                }
+                else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
                 {
                     hitinfo.damageTypes.ScaleAll(1f);
                     return true;
                 }
-                if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false) return false;
-                if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
+                else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
+                {
+                    if (PlayerIsNew(owner))
+                    {
+                        hitinfo.damageTypes = new DamageTypeList();
+                        hitinfo.DoHitEffects = false;
+                        hitinfo.HitMaterial = 0;
+                        hitinfo.damageTypes.ScaleAll(0f);
+                        NextTick(() =>
+                        {
+                            RemoveProtection(entity, hitinfo);
+                            MessagePlayer(attacker, owner);
+                            Refund(attacker, name, entity);
+                        });
+                        return true;
+                    }
+                }
+                else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
                 {
                     hitinfo.damageTypes.ScaleAll(1f);
                     return true;
@@ -1425,18 +1460,55 @@ namespace Oxide.Plugins
                     });
                     return true;
                 }
-            }
-
-            if (name == null && owner != 0u && attacker != null && dmgType == DamageType.Explosion)
-            {
-                if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false) return false;
-                if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
+                else
                 {
                     hitinfo.damageTypes.ScaleAll(1f);
                     return true;
                 }
-                if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false) return false;
-                if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
+            }
+
+            if (name == null && owner != 0u && attacker != null && dmgType == DamageType.Explosion)
+            {
+                if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
+                {
+                    if (PlayerIsNew(owner))
+                    {
+                        hitinfo.damageTypes = new DamageTypeList();
+                        hitinfo.DoHitEffects = false;
+                        hitinfo.HitMaterial = 0;
+                        hitinfo.damageTypes.ScaleAll(0f);
+                        NextTick(() =>
+                        {
+                            RemoveProtection(entity, hitinfo);
+                            MessagePlayer(attacker, owner);
+                            Refund(attacker, name, entity);
+                        });
+                        return true;
+                    }
+                }
+                else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
+                {
+                    hitinfo.damageTypes.ScaleAll(1f);
+                    return true;
+                }
+                else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
+                {
+                    if (PlayerIsNew(owner))
+                    {
+                        hitinfo.damageTypes = new DamageTypeList();
+                        hitinfo.DoHitEffects = false;
+                        hitinfo.HitMaterial = 0;
+                        hitinfo.damageTypes.ScaleAll(0f);
+                        NextTick(() =>
+                        {
+                            RemoveProtection(entity, hitinfo);
+                            MessagePlayer(attacker, owner);
+                            Refund(attacker, name, entity);
+                        });
+                        return true;
+                    }
+                }
+                else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
                 {
                     hitinfo.damageTypes.ScaleAll(1f);
                     return true;
@@ -1449,6 +1521,11 @@ namespace Oxide.Plugins
                     hitinfo.damageTypes.ScaleAll(0f);
                     return true;
                 }
+                else
+                {
+                    hitinfo.damageTypes.ScaleAll(1f);
+                    return true;
+                }
             }
 
             if (name == null && owner != 0u && attacker == null && dmgType == DamageType.Heat)
@@ -1459,6 +1536,11 @@ namespace Oxide.Plugins
                     hitinfo.DoHitEffects = false;
                     hitinfo.HitMaterial = 0;
                     hitinfo.damageTypes.ScaleAll(0f);
+                    return true;
+                }
+                else
+                {
+                    hitinfo.damageTypes.ScaleAll(1f);
                     return true;
                 }
             }
@@ -1613,10 +1695,10 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private void RemoveCD(List<BasePlayer> List, BasePlayer player, float time = 0.1f)
+        private void RemoveCD(List<BasePlayer> List, BasePlayer player)
         {
             if (player == null) return;
-            timer.Once(time, () =>
+            timer.Once(5, () =>
             {
                 if (List.Contains(player)) List.Remove(player);
             });
@@ -2012,9 +2094,15 @@ namespace Oxide.Plugins
                             return;
                         }
 
+                        if (NotSupportedRaidTools.ContainsKey(helditem.info.shortname))
+                        {
+                            p.Reply(lang.GetMessage("Not_Supported", this, p.Id));
+                            return;
+                        }
+
                         if (RaidToolsCheck.ContainsKey(helditem.info.shortname))
                         {
-                            p.Reply(lang.GetMessage("holding_item", this, player.UserIDString), null, raidtools[helditem.info.shortname]);
+                            p.Reply(lang.GetMessage("holding_item", this, player.UserIDString), null, RaidToolsCheck[helditem.info.shortname]);
                             return;
                         }
                         else
