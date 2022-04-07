@@ -21,14 +21,14 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "MasterSplinter", "2.0.6", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "MasterSplinter", "2.0.7", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, Clans, StartProtection;
 
         //set this to true if you are having issues with the plugin
         private bool debug = false;
-        private string debugversion = "0.0.8";
+        private string debugversion = "0.0.5";
 
         private List<BasePlayer> cooldown = new List<BasePlayer>();
         private List<BasePlayer> MessageCooldown = new List<BasePlayer>();
@@ -472,7 +472,10 @@ namespace Oxide.Plugins
             StartChecking();
             CheckPlayersWithNoInfo();
 
-            timer.Every(60f, RefreshClanCache);
+            if (Clans != null)
+            {
+                timer.Every(60f, RefreshClanCache);
+            }
 
             if (!config.Advance.OnServerSave)
             {
@@ -486,28 +489,11 @@ namespace Oxide.Plugins
 
             if (PlaytimeTracker == null)
             {
-                PrintWarning(lang.GetMessage("pt_notInstalled_first", this, null));
-                timer.Once(30f, () =>
-                {
-                    if (PlaytimeTracker == null)
-                    {
-                        PrintWarning(lang.GetMessage("pt_notInstalled", this, null));
-                        return;
-                    }
-                    PrintWarning(lang.GetMessage("pt_detected", this, null));
-                });
+                PrintWarning(lang.GetMessage("pt_notInstalled", this, null));
             }
             if (config.Relationship.CheckClan && Clans == null)
             {
-                PrintWarning(lang.GetMessage("C_notInstalled_first", this, null));
-                timer.Once(30f, () => {
-                    if (Clans == null)
-                    {
-                        PrintWarning(lang.GetMessage("C_notInstalled", this, null));
-                        return;
-                    }
-                    PrintWarning(lang.GetMessage("C_detected", this, null));
-                });
+                PrintWarning(lang.GetMessage("C_notInstalled", this, null));
             }
         }
 
@@ -536,7 +522,7 @@ namespace Oxide.Plugins
 
             if (entity?.OwnerID == attacker?.userID) return null;
 
-            if (dmgType == DamageType.Decay || dmgType == DamageType.Generic || dmgType == DamageType.Bite) return null;
+            if (dmgType == DamageType.Decay || dmgType == DamageType.Generic || dmgType == DamageType.Bite || dmgType == DamageType.Fun_Water) return null;
 
             if (entity.OwnerID == 0u || CheckForBuildingOrDeployable(entity, hitinfo) == false) return null;
 
@@ -546,11 +532,7 @@ namespace Oxide.Plugins
 
             if (CheckForHelicopterOrMLRS(entity, hitinfo) == true) return null;
 
-            if (ExplosiveAmmoFix(entity, hitinfo) == true) return null;
-
-            if (FlamethowerFix(entity, hitinfo) == true) return null;
-
-            if (SnowballGunFix(entity, hitinfo) == true) return null;
+            if (NullWeaponCheck(entity, hitinfo) == true) return null;
 
             if (config.RaidTools.AllowedRaidTools.ContainsKey(name))
             {
@@ -1112,175 +1094,108 @@ namespace Oxide.Plugins
             return name;
         }
 
-        private bool ExplosiveAmmoFix(BaseCombatEntity entity, HitInfo hitinfo)
+        private bool NullWeaponCheck(BaseCombatEntity entity, HitInfo hitinfo)
         {
             var name = CheckForRaidingTools(hitinfo);
             var owner = config.Other.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
             BasePlayer attacker = hitinfo.InitiatorPlayer;
-            var dmgType = hitinfo?.damageTypes?.GetMajorityDamageType() ?? DamageType.Generic;
 
             if (config.Entity.AllowedEntities.ContainsKey(entity.ShortPrefabName))
             {
+                if (name == null && owner != 0u && attacker != null)
+                {
+                    if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
+                    {
+                        if (PlayerIsNew(owner))
+                        {
+                            hitinfo.damageTypes = new DamageTypeList();
+                            hitinfo.DoHitEffects = false;
+                            hitinfo.HitMaterial = 0;
+                            hitinfo.damageTypes.ScaleAll(0f);
+                            NextTick(() =>
+                            {
+                                RemoveProtection(entity, hitinfo);
+                                MessagePlayer(attacker, owner);
+                                Refund(attacker, name, entity);
+                            });
+                            return true;
+                        }
+                        else
+                        {
+                            hitinfo.damageTypes.ScaleAll(1f);
+                            return true;
+                        }
+                    }
+                    else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
+                    {
+                        hitinfo.damageTypes.ScaleAll(1f);
+                        return true;
+                    }
+                    else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
+                    {
+                        if (PlayerIsNew(owner))
+                        {
+                            hitinfo.damageTypes = new DamageTypeList();
+                            hitinfo.DoHitEffects = false;
+                            hitinfo.HitMaterial = 0;
+                            hitinfo.damageTypes.ScaleAll(0f);
+                            NextTick(() =>
+                            {
+                                RemoveProtection(entity, hitinfo);
+                                MessagePlayer(attacker, owner);
+                                Refund(attacker, name, entity);
+                            });
+                            return true;
+                        }
+                        else
+                        {
+                            hitinfo.damageTypes.ScaleAll(1f);
+                            return true;
+                        }
+                    }
+                    else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
+                    {
+                        hitinfo.damageTypes.ScaleAll(1f);
+                        return true;
+                    }
+                    else if (PlayerIsNew(owner))
+                    {
+                        hitinfo.damageTypes = new DamageTypeList();
+                        hitinfo.DoHitEffects = false;
+                        hitinfo.HitMaterial = 0;
+                        hitinfo.damageTypes.ScaleAll(0f);
+                        return true;
+                    }
+                    else
+                    {
+                        hitinfo.damageTypes.ScaleAll(1f);
+                        return true;
+                    }
+                }
+
+                if (name == null && owner != 0u && attacker == null)
+                {
+                    if (PlayerIsNew(owner))
+                    {
+                        hitinfo.damageTypes = new DamageTypeList();
+                        hitinfo.DoHitEffects = false;
+                        hitinfo.HitMaterial = 0;
+                        hitinfo.damageTypes.ScaleAll(0f);
+                        return true;
+                    }
+                    else
+                    {
+                        hitinfo.damageTypes.ScaleAll(1f);
+                        return true;
+                    }
+                }
+
                 return false;
             }
 
             if (config.Entity.AllowedEntitiesNoob.ContainsKey(entity.ShortPrefabName))
             {
-                if (name == "riflebullet_explosive" && owner != 0u && attacker != null && dmgType == DamageType.Bullet)
-                {
-                    if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
-                    {
-                        if (PlayerIsNew(owner))
-                        {
-                            hitinfo.damageTypes = new DamageTypeList();
-                            hitinfo.DoHitEffects = false;
-                            hitinfo.HitMaterial = 0;
-                            hitinfo.damageTypes.ScaleAll(0f);
-                            NextTick(() =>
-                            {
-                                RemoveProtection(entity, hitinfo);
-                                MessagePlayer(attacker, owner);
-                                Refund(attacker, name, entity);
-                            });
-                            return true;
-                        }
-                        else
-                        {
-                            hitinfo.damageTypes.ScaleAll(1f);
-                            return true;
-                        }
-                    }
-                    else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                    else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
-                    {
-                        if (PlayerIsNew(owner))
-                        {
-                            hitinfo.damageTypes = new DamageTypeList();
-                            hitinfo.DoHitEffects = false;
-                            hitinfo.HitMaterial = 0;
-                            hitinfo.damageTypes.ScaleAll(0f);
-                            NextTick(() =>
-                            {
-                                RemoveProtection(entity, hitinfo);
-                                MessagePlayer(attacker, owner);
-                                Refund(attacker, name, entity);
-                            });
-                            return true;
-                        }
-                        else
-                        {
-                            hitinfo.damageTypes.ScaleAll(1f);
-                            return true;
-                        }
-                    }
-                    else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                    else if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        NextTick(() =>
-                        {
-                            RemoveProtection(entity, hitinfo);
-                            MessagePlayer(attacker, owner);
-                            Refund(attacker, name, entity);
-                        });
-                        return true;
-                    }
-                    else
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                }
-
-                if (name == "riflebullet_explosive" && owner != 0u && attacker != null && dmgType == DamageType.Explosion)
-                {
-                    if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
-                    {
-                        if (PlayerIsNew(owner))
-                        {
-                            hitinfo.damageTypes = new DamageTypeList();
-                            hitinfo.DoHitEffects = false;
-                            hitinfo.HitMaterial = 0;
-                            hitinfo.damageTypes.ScaleAll(0f);
-                            NextTick(() =>
-                            {
-                                RemoveProtection(entity, hitinfo);
-                                MessagePlayer(attacker, owner);
-                                Refund(attacker, name, entity);
-                            });
-                            return true;
-                        }
-                        else
-                        {
-                            hitinfo.damageTypes.ScaleAll(1f);
-                            return true;
-                        }
-                    }
-                    else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                    else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
-                    {
-                        if (PlayerIsNew(owner))
-                        {
-                            hitinfo.damageTypes = new DamageTypeList();
-                            hitinfo.DoHitEffects = false;
-                            hitinfo.HitMaterial = 0;
-                            hitinfo.damageTypes.ScaleAll(0f);
-                            NextTick(() =>
-                            {
-                                RemoveProtection(entity, hitinfo);
-                                MessagePlayer(attacker, owner);
-                                Refund(attacker, name, entity);
-                            });
-                            return true;
-                        }
-                        else
-                        {
-                            hitinfo.damageTypes.ScaleAll(1f);
-                            return true;
-                        }
-                    }
-                    else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                    else if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        NextTick(() =>
-                        {
-                            RemoveProtection(entity, hitinfo);
-                            MessagePlayer(attacker, owner);
-                            Refund(attacker, name, entity);
-                        });
-                        return true;
-                    }
-                    else
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                }
-
-                if (name == null && owner != 0u && attacker != null && dmgType == DamageType.Explosion)
+                if (name == null && owner != 0u && attacker != null)
                 {
                     if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
                     {
@@ -1351,84 +1266,7 @@ namespace Oxide.Plugins
                     }
                 }
 
-                if (name == null && owner != 0u && attacker != null && dmgType == DamageType.Bullet)
-                {
-                    if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
-                    {
-                        if (PlayerIsNew(owner))
-                        {
-                            hitinfo.damageTypes = new DamageTypeList();
-                            hitinfo.DoHitEffects = false;
-                            hitinfo.HitMaterial = 0;
-                            hitinfo.damageTypes.ScaleAll(0f);
-                            NextTick(() =>
-                            {
-                                RemoveProtection(entity, hitinfo);
-                                MessagePlayer(attacker, owner);
-                                Refund(attacker, name, entity);
-                            });
-                            return true;
-                        }
-                        else
-                        {
-                            hitinfo.damageTypes.ScaleAll(1f);
-                            return true;
-                        }
-                    }
-                    else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                    else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
-                    {
-                        if (PlayerIsNew(owner))
-                        {
-                            hitinfo.damageTypes = new DamageTypeList();
-                            hitinfo.DoHitEffects = false;
-                            hitinfo.HitMaterial = 0;
-                            hitinfo.damageTypes.ScaleAll(0f);
-                            NextTick(() =>
-                            {
-                                RemoveProtection(entity, hitinfo);
-                                MessagePlayer(attacker, owner);
-                                Refund(attacker, name, entity);
-                            });
-                            return true;
-                        }
-                        else
-                        {
-                            hitinfo.damageTypes.ScaleAll(1f);
-                            return true;
-                        }
-                    }
-                    else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                    else if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        NextTick(() =>
-                        {
-                            RemoveProtection(entity, hitinfo);
-                            MessagePlayer(attacker, owner);
-                            Refund(attacker, name, entity);
-                        });
-                        return true;
-                    }
-                    else
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                }
-
-                if (name == null && owner != 0u && attacker == null && dmgType == DamageType.Heat)
+                if (name == null && owner != 0u && attacker == null)
                 {
                     if (PlayerIsNew(owner))
                     {
@@ -1444,163 +1282,11 @@ namespace Oxide.Plugins
                         return true;
                     }
                 }
+
+                return false;
             }
 
-            if (name == "riflebullet_explosive" && owner != 0u && attacker != null && dmgType == DamageType.Bullet)
-            {
-                if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
-                {
-                    if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        NextTick(() =>
-                        {
-                            RemoveProtection(entity, hitinfo);
-                            MessagePlayer(attacker, owner);
-                            Refund(attacker, name, entity);
-                        });
-                        return true;
-                    }
-                    else
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                }
-                else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
-                {
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    return true;
-                }
-                else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
-                {
-                    if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        NextTick(() =>
-                        {
-                            RemoveProtection(entity, hitinfo);
-                            MessagePlayer(attacker, owner);
-                            Refund(attacker, name, entity);
-                        });
-                        return true;
-                    }
-                    else
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                }
-                else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
-                {
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    return true;
-                }
-                else if (PlayerIsNew(owner))
-                {
-                    hitinfo.damageTypes = new DamageTypeList();
-                    hitinfo.DoHitEffects = false;
-                    hitinfo.HitMaterial = 0;
-                    hitinfo.damageTypes.ScaleAll(0f);
-                    NextTick(() =>
-                    {
-                        RemoveProtection(entity, hitinfo);
-                        MessagePlayer(attacker, owner);
-                        Refund(attacker, name, entity);
-                    });
-                    return true;
-                }
-                else
-                {
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    return true;
-                }
-            }
-
-            if (name == "riflebullet_explosive" && owner != 0u && attacker != null && dmgType == DamageType.Explosion)
-            {
-                if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
-                {
-                    if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        NextTick(() =>
-                        {
-                            RemoveProtection(entity, hitinfo);
-                            MessagePlayer(attacker, owner);
-                            Refund(attacker, name, entity);
-                        });
-                        return true;
-                    }
-                    else
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                }
-                else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
-                {
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    return true;
-                }
-                else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
-                {
-                    if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        NextTick(() =>
-                        {
-                            RemoveProtection(entity, hitinfo);
-                            MessagePlayer(attacker, owner);
-                            Refund(attacker, name, entity);
-                        });
-                        return true;
-                    }
-                    else
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                }
-                else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
-                {
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    return true;
-                }
-                else if (PlayerIsNew(owner))
-                {
-                    hitinfo.damageTypes = new DamageTypeList();
-                    hitinfo.DoHitEffects = false;
-                    hitinfo.HitMaterial = 0;
-                    hitinfo.damageTypes.ScaleAll(0f);
-                    NextTick(() =>
-                    {
-                        RemoveProtection(entity, hitinfo);
-                        MessagePlayer(attacker, owner);
-                        Refund(attacker, name, entity);
-                    });
-                    return true;
-                }
-                else
-                {
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    return true;
-                }
-            }
-
-            if (name == null && owner != 0u && attacker != null && dmgType == DamageType.Explosion)
+            if (name == null && owner != 0u && attacker != null)
             {
                 if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
                 {
@@ -1671,406 +1357,9 @@ namespace Oxide.Plugins
                 }
             }
 
-            if (name == null && owner != 0u && attacker != null && dmgType == DamageType.Bullet)
-            {
-                if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
-                {
-                    if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        NextTick(() =>
-                        {
-                            RemoveProtection(entity, hitinfo);
-                            MessagePlayer(attacker, owner);
-                            Refund(attacker, name, entity);
-                        });
-                        return true;
-                    }
-                    else
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                }
-                else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
-                {
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    return true;
-                }
-                else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
-                {
-                    if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        NextTick(() =>
-                        {
-                            RemoveProtection(entity, hitinfo);
-                            MessagePlayer(attacker, owner);
-                            Refund(attacker, name, entity);
-                        });
-                        return true;
-                    }
-                    else
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                }
-                else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
-                {
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    return true;
-                }
-                else if (PlayerIsNew(owner))
-                {
-                    hitinfo.damageTypes = new DamageTypeList();
-                    hitinfo.DoHitEffects = false;
-                    hitinfo.HitMaterial = 0;
-                    hitinfo.damageTypes.ScaleAll(0f);
-                    NextTick(() =>
-                    {
-                        RemoveProtection(entity, hitinfo);
-                        MessagePlayer(attacker, owner);
-                        Refund(attacker, name, entity);
-                    });
-                    return true;
-                }
-                else
-                {
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    return true;
-                }
-            }
-
-            if (name == null && owner != 0u && attacker == null && dmgType == DamageType.Heat)
+            if (name == null && owner != 0u && attacker == null)
             {
                 if (PlayerIsNew(owner))
-                {
-                    hitinfo.damageTypes = new DamageTypeList();
-                    hitinfo.DoHitEffects = false;
-                    hitinfo.HitMaterial = 0;
-                    hitinfo.damageTypes.ScaleAll(0f);
-                    return true;
-                }
-                else
-                {
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private bool FlamethowerFix(BaseCombatEntity entity, HitInfo hitinfo)
-        {
-            var name = CheckForRaidingTools(hitinfo);
-            var owner = config.Other.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
-            BasePlayer attacker = hitinfo.InitiatorPlayer;
-            var dmgType = hitinfo?.damageTypes?.GetMajorityDamageType() ?? DamageType.Generic;
-
-            if (config.Entity.AllowedEntities.ContainsKey(entity.ShortPrefabName))
-            {
-                return false;
-            }
-
-            if (config.Entity.AllowedEntitiesNoob.ContainsKey(entity.ShortPrefabName))
-            {
-                if (name == null && owner != 0u && attacker != null && dmgType == DamageType.Heat)
-                {
-                    if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
-                    {
-                        if (PlayerIsNew(owner))
-                        {
-                            hitinfo.damageTypes = new DamageTypeList();
-                            hitinfo.DoHitEffects = false;
-                            hitinfo.HitMaterial = 0;
-                            hitinfo.damageTypes.ScaleAll(0f);
-                            NextTick(() =>
-                            {
-                                RemoveProtection(entity, hitinfo);
-                                MessagePlayer(attacker, owner);
-                                Refund(attacker, name, entity);
-                            });
-                            return true;
-                        }
-                        else
-                        {
-                            hitinfo.damageTypes.ScaleAll(1f);
-                            return true;
-                        }
-                    }
-                    else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                    else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
-                    {
-                        if (PlayerIsNew(owner))
-                        {
-                            hitinfo.damageTypes = new DamageTypeList();
-                            hitinfo.DoHitEffects = false;
-                            hitinfo.HitMaterial = 0;
-                            hitinfo.damageTypes.ScaleAll(0f);
-                            NextTick(() =>
-                            {
-                                RemoveProtection(entity, hitinfo);
-                                MessagePlayer(attacker, owner);
-                                Refund(attacker, name, entity);
-                            });
-                            return true;
-                        }
-                        else
-                        {
-                            hitinfo.damageTypes.ScaleAll(1f);
-                            return true;
-                        }
-                    }
-                    else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                    else if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        return true;
-                    }
-                    else
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                }
-            }
-
-            if (name == null && owner != 0u && attacker != null && dmgType == DamageType.Heat)
-            {
-                if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
-                {
-                    if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        NextTick(() =>
-                        {
-                            RemoveProtection(entity, hitinfo);
-                            MessagePlayer(attacker, owner);
-                            Refund(attacker, name, entity);
-                        });
-                        return true;
-                    }
-                    else
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                }
-                else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
-                {
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    return true;
-                }
-                else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
-                {
-                    if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        NextTick(() =>
-                        {
-                            RemoveProtection(entity, hitinfo);
-                            MessagePlayer(attacker, owner);
-                            Refund(attacker, name, entity);
-                        });
-                        return true;
-                    }
-                    else
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                }
-                else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
-                {
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    return true;
-                }
-                else if (PlayerIsNew(owner))
-                {
-                    hitinfo.damageTypes = new DamageTypeList();
-                    hitinfo.DoHitEffects = false;
-                    hitinfo.HitMaterial = 0;
-                    hitinfo.damageTypes.ScaleAll(0f);
-                    return true;
-                }
-                else
-                {
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private bool SnowballGunFix(BaseCombatEntity entity, HitInfo hitinfo)
-        {
-            var name = CheckForRaidingTools(hitinfo);
-            var owner = config.Other.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
-            BasePlayer attacker = hitinfo.InitiatorPlayer;
-            var dmgType = hitinfo?.damageTypes?.GetMajorityDamageType() ?? DamageType.Generic;
-
-            if (config.Entity.AllowedEntities.ContainsKey(entity.ShortPrefabName))
-            {
-                return false;
-            }
-
-            if (config.Entity.AllowedEntitiesNoob.ContainsKey(entity.ShortPrefabName))
-            {
-                if (name == null && owner != 0u && attacker != null && dmgType == DamageType.Blunt)
-                {
-                    if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
-                    {
-                        if (PlayerIsNew(owner))
-                        {
-                            hitinfo.damageTypes = new DamageTypeList();
-                            hitinfo.DoHitEffects = false;
-                            hitinfo.HitMaterial = 0;
-                            hitinfo.damageTypes.ScaleAll(0f);
-                            NextTick(() =>
-                            {
-                                RemoveProtection(entity, hitinfo);
-                                MessagePlayer(attacker, owner);
-                                Refund(attacker, name, entity);
-                            });
-                            return true;
-                        }
-                        else
-                        {
-                            hitinfo.damageTypes.ScaleAll(1f);
-                            return true;
-                        }
-                    }
-                    else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                    else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
-                    {
-                        if (PlayerIsNew(owner))
-                        {
-                            hitinfo.damageTypes = new DamageTypeList();
-                            hitinfo.DoHitEffects = false;
-                            hitinfo.HitMaterial = 0;
-                            hitinfo.damageTypes.ScaleAll(0f);
-                            NextTick(() =>
-                            {
-                                RemoveProtection(entity, hitinfo);
-                                MessagePlayer(attacker, owner);
-                                Refund(attacker, name, entity);
-                            });
-                            return true;
-                        }
-                        else
-                        {
-                            hitinfo.damageTypes.ScaleAll(1f);
-                            return true;
-                        }
-                    }
-                    else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                    else if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        return true;
-                    }
-                    else
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                }
-            }
-
-            if (name == null && owner != 0u && attacker != null && dmgType == DamageType.Blunt)
-            {
-                if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == false)
-                {
-                    if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        NextTick(() =>
-                        {
-                            RemoveProtection(entity, hitinfo);
-                            MessagePlayer(attacker, owner);
-                            Refund(attacker, name, entity);
-                        });
-                        return true;
-                    }
-                    else
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                }
-                else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
-                {
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    return true;
-                }
-                else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
-                {
-                    if (PlayerIsNew(owner))
-                    {
-                        hitinfo.damageTypes = new DamageTypeList();
-                        hitinfo.DoHitEffects = false;
-                        hitinfo.HitMaterial = 0;
-                        hitinfo.damageTypes.ScaleAll(0f);
-                        NextTick(() =>
-                        {
-                            RemoveProtection(entity, hitinfo);
-                            MessagePlayer(attacker, owner);
-                            Refund(attacker, name, entity);
-                        });
-                        return true;
-                    }
-                    else
-                    {
-                        hitinfo.damageTypes.ScaleAll(1f);
-                        return true;
-                    }
-                }
-                else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
-                {
-                    hitinfo.damageTypes.ScaleAll(1f);
-                    return true;
-                }
-                else if (PlayerIsNew(owner))
                 {
                     hitinfo.damageTypes = new DamageTypeList();
                     hitinfo.DoHitEffects = false;
@@ -2233,6 +1522,7 @@ namespace Oxide.Plugins
             if (entity.PrefabName.Contains("fence")) return true;
             if (entity.PrefabName.Contains("generator")) return true;
             if (entity.PrefabName.Contains("watchtower")) return true;
+            if (entity.PrefabName.Contains("landmine")) return true;
 
             return false;
         }
