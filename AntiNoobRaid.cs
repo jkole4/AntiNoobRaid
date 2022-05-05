@@ -21,14 +21,14 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "MasterSplinter", "2.0.7", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "MasterSplinter", "2.0.8", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, Clans, StartProtection;
 
         //set this to true if you are having issues with the plugin
         private bool debug = false;
-        private string debugversion = "0.0.5";
+        private string debugversion = "0.4.3";
 
         private List<BasePlayer> cooldown = new List<BasePlayer>();
         private List<BasePlayer> MessageCooldown = new List<BasePlayer>();
@@ -183,6 +183,8 @@ namespace Oxide.Plugins
             public bool CheckClan = true;
             [JsonProperty("Enable 'Team' Support (Allow team members to destroy each others entities & Remove protection from team members when a member tries to raid)")]
             public bool CheckTeam = true;
+            [JsonProperty("Enable 'Team' playtime sync (Sync's all player's within a team to the highest playtime)")]
+            public bool SyncTeamPlaytime = true;
         }
 
         public class RefundSettings
@@ -197,7 +199,7 @@ namespace Oxide.Plugins
         {
             [JsonProperty("Notify player on first connection with protection time")]
             public bool MessageOnFirstConnection = true;
-            [JsonProperty("Use game tips to send first connection message & lost protection to players")]
+            [JsonProperty("Use game tips to send most messages to players")]
             public bool UseGT = false;
             [JsonProperty("Show message for not being able to raid")]
             public bool ShowMessage = true;
@@ -302,7 +304,8 @@ namespace Oxide.Plugins
                 {"C_notInstalled", "Clans is not installed. Please install and reload AntiNoobRaid!"},
                 {"C_detected", "Clans detected"},
 
-                {"userinfo_nofound", "Failed to get playtime info for {0}! trying again in 60 seconds!"},
+                {"userinfo_nofound", "Failed to get playtime info for {0}! trying again in 300 seconds!"},
+                {"userinfo_nofound_2nd_attempt", "Failed to get playtime info for {0}! Has been marked as non-noob!"},
                 {"userinfo_found", "Successfully got playtime info for {0}!"},
 
                 {"twig_can_attack", "This structure is Twig & is not raid protected. Please upgrade to Wood or higer for protection!"},
@@ -549,6 +552,10 @@ namespace Oxide.Plugins
                     });
                     return true;
                 }
+                else
+                {
+                    return null;
+                }
             }
 
             if (config.Entity.AllowedEntities.ContainsKey(entity.ShortPrefabName))
@@ -571,8 +578,10 @@ namespace Oxide.Plugins
                     });
                     return true;
                 }
-
-                return null;
+                else
+                {
+                    return null;
+                }
             }
 
             if (attacker == null || owner == 0u) return null;
@@ -1037,6 +1046,83 @@ namespace Oxide.Plugins
             }
         }
 
+        private void OnTeamAcceptInvite(RelationshipManager.PlayerTeam team)
+        {
+            timer.Once(2f, () =>
+            {                          
+            foreach (ulong member in team.members)
+            {
+                var LeaderPlayTime = storedData.players[team.GetLeader().userID];
+                var MemberPlaytime = storedData.players[member];
+
+                if (LeaderPlayTime >= MemberPlaytime)
+                {
+                    if (MemberPlaytime == -50d)
+                    {
+                        storedData.players[team.GetLeader().userID] = MemberPlaytime;
+                    }
+                    else
+                    {
+                        storedData.players[member] = LeaderPlayTime;
+                    }
+                }
+                else if (MemberPlaytime >= LeaderPlayTime)
+                {
+                    if (LeaderPlayTime == -50d)
+                    {
+                        storedData.players[member] = LeaderPlayTime;
+                    }
+                    else
+                    {
+                        storedData.players[team.GetLeader().userID] = MemberPlaytime;
+                    }
+                }
+            }
+            });
+        }
+
+        private void OnPlayerConnected(BasePlayer player)
+        {
+            if (config.Relationship.SyncTeamPlaytime) SyncTeam(player);
+        }
+
+        private void SyncTeam (BasePlayer player)
+        {
+            var team = RelationshipManager.ServerInstance?.teams[player.currentTeam];
+
+            if (player.currentTeam != 0)
+            {
+                foreach (ulong member in team.members)
+                {
+                    var LeaderPlayTime = storedData.players[team.GetLeader().userID];
+                    var MemberPlaytime = storedData.players[member];
+
+                    if (LeaderPlayTime >= MemberPlaytime)
+                    {
+                        if (MemberPlaytime == -50d)
+                        {
+                            storedData.players[team.GetLeader().userID] = MemberPlaytime;
+                        }
+                        else
+                        {
+                            storedData.players[member] = LeaderPlayTime;
+                        }
+                    }
+                    else if (MemberPlaytime >= LeaderPlayTime)
+                    {
+                        if (LeaderPlayTime == -50d)
+                        {
+                            storedData.players[member] = LeaderPlayTime;
+                        }
+                        else
+                        {
+                            storedData.players[team.GetLeader().userID] = MemberPlaytime;
+                        }
+                    }
+                }
+            }
+        }
+
         #endregion
 
         #region Weapon Checks
@@ -1122,13 +1208,11 @@ namespace Oxide.Plugins
                         }
                         else
                         {
-                            hitinfo.damageTypes.ScaleAll(1f);
                             return true;
                         }
                     }
                     else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
                     {
-                        hitinfo.damageTypes.ScaleAll(1f);
                         return true;
                     }
                     else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
@@ -1149,13 +1233,11 @@ namespace Oxide.Plugins
                         }
                         else
                         {
-                            hitinfo.damageTypes.ScaleAll(1f);
                             return true;
                         }
                     }
                     else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
                     {
-                        hitinfo.damageTypes.ScaleAll(1f);
                         return true;
                     }
                     else if (PlayerIsNew(owner))
@@ -1168,7 +1250,6 @@ namespace Oxide.Plugins
                     }
                     else
                     {
-                        hitinfo.damageTypes.ScaleAll(1f);
                         return true;
                     }
                 }
@@ -1185,7 +1266,6 @@ namespace Oxide.Plugins
                     }
                     else
                     {
-                        hitinfo.damageTypes.ScaleAll(1f);
                         return true;
                     }
                 }
@@ -1215,13 +1295,11 @@ namespace Oxide.Plugins
                         }
                         else
                         {
-                            hitinfo.damageTypes.ScaleAll(1f);
                             return true;
                         }
                     }
                     else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
                     {
-                        hitinfo.damageTypes.ScaleAll(1f);
                         return true;
                     }
                     else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
@@ -1242,13 +1320,11 @@ namespace Oxide.Plugins
                         }
                         else
                         {
-                            hitinfo.damageTypes.ScaleAll(1f);
                             return true;
                         }
                     }
                     else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
                     {
-                        hitinfo.damageTypes.ScaleAll(1f);
                         return true;
                     }
                     else if (PlayerIsNew(owner))
@@ -1261,7 +1337,6 @@ namespace Oxide.Plugins
                     }
                     else
                     {
-                        hitinfo.damageTypes.ScaleAll(1f);
                         return true;
                     }
                 }
@@ -1278,7 +1353,6 @@ namespace Oxide.Plugins
                     }
                     else
                     {
-                        hitinfo.damageTypes.ScaleAll(1f);
                         return true;
                     }
                 }
@@ -1306,13 +1380,11 @@ namespace Oxide.Plugins
                     }
                     else
                     {
-                        hitinfo.damageTypes.ScaleAll(1f);
                         return true;
                     }
                 }
                 else if (config.Relationship.CheckTeam && CheckTeam(entity, hitinfo) == true)
                 {
-                    hitinfo.damageTypes.ScaleAll(1f);
                     return true;
                 }
                 else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == false)
@@ -1333,13 +1405,11 @@ namespace Oxide.Plugins
                     }
                     else
                     {
-                        hitinfo.damageTypes.ScaleAll(1f);
                         return true;
                     }
                 }
                 else if (config.Relationship.CheckClan && CheckClan(entity, hitinfo) == true)
                 {
-                    hitinfo.damageTypes.ScaleAll(1f);
                     return true;
                 }
                 else if (PlayerIsNew(owner))
@@ -1352,7 +1422,6 @@ namespace Oxide.Plugins
                 }
                 else
                 {
-                    hitinfo.damageTypes.ScaleAll(1f);
                     return true;
                 }
             }
@@ -1369,7 +1438,6 @@ namespace Oxide.Plugins
                 }
                 else
                 {
-                    hitinfo.damageTypes.ScaleAll(1f);
                     return true;
                 }
             }
@@ -1397,25 +1465,9 @@ namespace Oxide.Plugins
 
         #endregion
 
-        private bool AllowOwnerCheckTime(BasePlayer attacker, ulong ID)
-        {
-            var player = Convert.ToString(attacker.UserIDString);
-            var owner = Convert.ToString(ID);
-            var val = 0d;
+        #region Playtime Checks
 
-            if (config.Messages.ShowOwnerTime)
-            {
-                if (player == owner)
-                {
-                    if (storedData.players.TryGetValue(ID, out val) && (val == -50d)) return false;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private void APICall(ulong ID, bool secondattempt = false)
+        private void APICall(ulong ID)
         {
             if (!ID.IsSteamId()) return;
             if (PlaytimeTracker == null)
@@ -1433,30 +1485,76 @@ namespace Oxide.Plugins
 
             catch (Exception)
             {
-                Puts(lang.GetMessage("userinfo_nofound", this, null), ID);
-                if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}", this, false);
-                if (!secondattempt) timer.Once(60f, () => APICall(ID, true));
+                if (apitime == -1d)
+                {
+                    Puts(lang.GetMessage("userinfo_nofound", this, null), ID);
+                    if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}", this, false);
+                    storedData.playersWithNoData.Add(ID);
+                    timer.Once(300f, () => APICall_SecondAttempt(ID));
+
+                    return;
+                }
+
             }
 
-            if (apitime == -1d)
+            if (apitime != -1d)
             {
-                if (secondattempt) storedData.playersWithNoData.Add(ID);
-
-                Puts(lang.GetMessage("userinfo_nofound", this, null), ID);
-                if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}", this, false);
-                return;
+                if (storedData.players.ContainsKey(ID))
+                {
+                    return;
+                }
+                else
+                {
+                    storedData.players.Add(ID, apitime);
+                    Puts(lang.GetMessage("userinfo_found", this, null), ID);
+                    if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Successfully got playtime info for {ID}", this, false);
+                }
             }
 
-            if (storedData.playersWithNoData.Contains(ID)) storedData.playersWithNoData.Remove(ID);
+        }
 
-            if (storedData.players.ContainsKey(ID)) storedData.players[ID] = apitime;
+        private void APICall_SecondAttempt(ulong ID)
+        {
+            double apitime = -1;
 
-            else
+            try
             {
-                storedData.players.Add(ID, apitime);
-                Puts(lang.GetMessage("userinfo_found", this, null), ID);
-                if (config.Advance.EnableLogging) LogToFile("userinfo", $"[{DateTime.Now}] - Successfully got playtime info for {ID}", this, false);
+                apitime = PlaytimeTracker?.Call<double>("GetPlayTime", ID.ToString()) ?? -1d;
+            }
 
+            catch (Exception)
+            {
+                if (apitime == -1d)
+                {
+                    Puts(lang.GetMessage("userinfo_nofound_2nd_attempt", this, null), ID);
+                    if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}. Has been marked as non-noob", this, false);
+
+                    if (storedData.players.ContainsKey(ID))
+                    {
+                        return;
+                    }
+                    else
+                    {
+                        storedData.players.Add(ID, -50d);
+                        if (storedData.playersWithNoData.Contains(ID)) storedData.playersWithNoData.Remove(ID);
+                    }
+
+                    return;
+                }
+            }
+
+            if (apitime != -1d)
+            {
+                if (storedData.players.ContainsKey(ID))
+                {
+                    return;
+                }
+                else
+                {
+                    storedData.players.Add(ID, apitime);
+                    Puts(lang.GetMessage("userinfo_found", this, null), ID);
+                    if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Successfully got playtime info for {ID}", this, false);
+                }
             }
         }
 
@@ -1489,6 +1587,26 @@ namespace Oxide.Plugins
             if (storedData.playersWithNoData.Contains(ID)) return;
             if (storedData.players[ID] == -50d || storedData.players[ID] == -25d) return;
             APICall(ID);
+        }
+
+        #endregion
+
+        private bool AllowOwnerCheckTime(BasePlayer attacker, ulong ID)
+        {
+            var player = Convert.ToString(attacker.UserIDString);
+            var owner = Convert.ToString(ID);
+            var val = 0d;
+
+            if (config.Messages.ShowOwnerTime)
+            {
+                if (player == owner)
+                {
+                    if (storedData.players.TryGetValue(ID, out val) && (val == -50d)) return false;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private bool CheckForBuildingOrDeployable(BaseCombatEntity entity, HitInfo hitinfo)
@@ -1541,7 +1659,6 @@ namespace Oxide.Plugins
                 {
                     if (config.Other.PatrolHeliDamage)
                     {
-                        hitinfo.damageTypes.ScaleAll(1f);
                         return true;
                     }
                     else if (!config.Other.PatrolHeliDamage)
@@ -1563,7 +1680,6 @@ namespace Oxide.Plugins
                 {
                     if (config.Other.PatrolHeliDamage)
                     {
-                        hitinfo.damageTypes.ScaleAll(1f);
                         return true;
                     }
                     else if (!config.Other.PatrolHeliDamage)
@@ -1585,7 +1701,6 @@ namespace Oxide.Plugins
                 {
                     if (config.Other.PatrolHeliDamage)
                     {
-                        hitinfo.damageTypes.ScaleAll(1f);
                         return true;
                     }
                     else if (!config.Other.PatrolHeliDamage)
@@ -1830,7 +1945,7 @@ namespace Oxide.Plugins
         private void RemoveCD(List<BasePlayer> List, BasePlayer player)
         {
             if (player == null) return;
-            timer.Once(5, () =>
+            timer.Once(10, () =>
             {
                 if (List.Contains(player)) List.Remove(player);
             });
