@@ -101,6 +101,7 @@ The use of a JSON editor or validation site such as jsonlint.com is recommended 
   "Team & Clan Settings": {
     "Enable 'Clan' Support (Allow clan members to destroy each others entities & Remove protection from clan members when a member tries to raid)": true,
     "Enable 'Team' Support (Allow team members to destroy each others entities & Remove protection from team members when a member tries to raid)": true
+    "Enable 'Team' playtime sync (Sync's all player's within a team to the highest playtime)": true
   },
   "Refund Settings": {
     "Refund explosives": true,
