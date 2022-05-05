@@ -21,14 +21,14 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "MasterSplinter", "2.0.8", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "MasterSplinter", "2.0.9", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, Clans, StartProtection;
 
         //set this to true if you are having issues with the plugin
         private bool debug = false;
-        private string debugversion = "0.4.3";
+        private string debugversion = "0.0.4";
 
         private List<BasePlayer> cooldown = new List<BasePlayer>();
         private List<BasePlayer> MessageCooldown = new List<BasePlayer>();
@@ -1087,11 +1087,11 @@ namespace Oxide.Plugins
         }
 
         private void SyncTeam (BasePlayer player)
-        {
-            var team = RelationshipManager.ServerInstance?.teams[player.currentTeam];
-
-            if (player.currentTeam != 0)
+        {           
+            if (player.currentTeam > 0)
             {
+                var team = RelationshipManager.ServerInstance?.teams[player.currentTeam];
+
                 foreach (ulong member in team.members)
                 {
                     var LeaderPlayTime = storedData.players[team.GetLeader().userID];
@@ -1485,24 +1485,15 @@ namespace Oxide.Plugins
 
             catch (Exception)
             {
-                if (apitime == -1d)
-                {
-                    Puts(lang.GetMessage("userinfo_nofound", this, null), ID);
-                    if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}", this, false);
-                    storedData.playersWithNoData.Add(ID);
-                    timer.Once(300f, () => APICall_SecondAttempt(ID));
-
-                    return;
-                }
-
+                Puts(lang.GetMessage("userinfo_nofound", this, null), ID);
+                if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}", this, false);
+                storedData.playersWithNoData.Add(ID);           
+                timer.Once(300f, () => APICall_SecondAttempt(ID));
             }
 
             if (apitime != -1d)
             {
-                if (storedData.players.ContainsKey(ID))
-                {
-                    return;
-                }
+                if (storedData.players.ContainsKey(ID)) storedData.players[ID] = apitime;
                 else
                 {
                     storedData.players.Add(ID, apitime);
@@ -1510,7 +1501,6 @@ namespace Oxide.Plugins
                     if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Successfully got playtime info for {ID}", this, false);
                 }
             }
-
         }
 
         private void APICall_SecondAttempt(ulong ID)
@@ -1524,31 +1514,23 @@ namespace Oxide.Plugins
 
             catch (Exception)
             {
-                if (apitime == -1d)
+                Puts(lang.GetMessage("userinfo_nofound_2nd_attempt", this, null), ID);
+                if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}. Has been marked as non-noob", this, false);
+
+                if (storedData.players.ContainsKey(ID))
                 {
-                    Puts(lang.GetMessage("userinfo_nofound_2nd_attempt", this, null), ID);
-                    if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}. Has been marked as non-noob", this, false);
-
-                    if (storedData.players.ContainsKey(ID))
-                    {
-                        return;
-                    }
-                    else
-                    {
-                        storedData.players.Add(ID, -50d);
-                        if (storedData.playersWithNoData.Contains(ID)) storedData.playersWithNoData.Remove(ID);
-                    }
-
                     return;
+                }
+                else
+                {
+                    storedData.players.Add(ID, -50d);
+                    if (storedData.playersWithNoData.Contains(ID)) storedData.playersWithNoData.Remove(ID);
                 }
             }
 
             if (apitime != -1d)
             {
-                if (storedData.players.ContainsKey(ID))
-                {
-                    return;
-                }
+                if (storedData.players.ContainsKey(ID)) storedData.players[ID] = apitime;
                 else
                 {
                     storedData.players.Add(ID, apitime);
