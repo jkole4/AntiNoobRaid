@@ -109,7 +109,7 @@ The use of a JSON editor or validation site such as jsonlint.com is recommended 
   },
   "Manage Messages": {
     "Notify player on first connection with protection time": true,
-    "Use game tips to send first connection message & lost protection to players": false,
+    "Use game tips to send most messages to players": true,
     "Show message for not being able to raid": true,
     "Show time until raidable": false,
     "Show time until raidable only to owners": true
