@@ -21,18 +21,21 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "MasterSplinter", "2.0.9", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "MasterSplinter", "2.1.0", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, Clans, StartProtection;
 
-        //set this to true if you are having issues with the plugin
-        private bool debug = false;
-        private string debugversion = "0.0.4";
+        //Pre-release Version Number
+        private bool beta = false;
+        private string betaversion = "0.3.9";
 
         private List<BasePlayer> cooldown = new List<BasePlayer>();
         private List<BasePlayer> MessageCooldown = new List<BasePlayer>();
+        private List<ulong> LeaderLower = new List<ulong>();
         private List<BuildingBlock> _blocks = new List<BuildingBlock>();
+        private Timer CheckingPT;
+        private Timer CheckingC;
 
         //private Dictionary<ulong, Timer> RaidTimerDictionary = new Dictionary<ulong, Timer>();
         private Dictionary<string, string> raidtools = new Dictionary<string, string>
@@ -175,6 +178,8 @@ namespace Oxide.Plugins
             public bool CheckFullOwnership = true;
             [JsonProperty("Kill fireballs when someone tries to raid protected player with fire (prevents lag)")]
             public bool KillFire = true;
+            [JsonProperty("Clear Player Data on Map-Wipe")]
+            public bool MapWipe = false;
         }
 
         public class RelationshipSettings
@@ -213,9 +218,9 @@ namespace Oxide.Plugins
 
         public class EntitySettings
         {
-            [JsonProperty("List of entities that can be destroyed even if owner is noob, true = destroyable everywhere")]
+            [JsonProperty("List of entities that can be destroyed even if owner is noob")]
             public Dictionary<string, string> AllowedEntities = AllowedEntitiesDictionary;
-            [JsonProperty("List of entities that can be destroyed without losing noob protection, true = destroyable everywhere")]
+            [JsonProperty("List of entities that can be destroyed without losing noob protection")]
             public Dictionary<string, string> AllowedEntitiesNoob = AllowedEntitiesNoobDictionary;
 
             public static Dictionary<string, string> AllowedEntitiesDictionary = new Dictionary<string, string>
@@ -263,9 +268,8 @@ namespace Oxide.Plugins
             SaveConfig();
         }
 
-        
-
         #endregion
+
         #region Lang
 
         protected override void LoadDefaultMessages()
@@ -297,11 +301,9 @@ namespace Oxide.Plugins
 
                 {"firstconnectionmessage", "You are a new player so your buildings are protected for first {0} hours of your time on server"},
 
-                {"pt_notInstalled_first", "Playtime Tracker is not installed, will check again in 30 seconds"},
-                {"pt_notInstalled", "Playtime Tracker is not installed. Please install and reload AntiNoobRaid!"},
+                {"pt_notInstalled", "Playtime Tracker is not installed, will check again in 15 seconds!"},
                 {"pt_detected", "Playtime Tracker detected"},
-                {"C_notInstalled_first", "Clans is not installed, will check again in 30 seconds"},
-                {"C_notInstalled", "Clans is not installed. Please install and reload AntiNoobRaid!"},
+                {"C_notInstalled", "Clans is not installed, will check again in 15 seconds!"},
                 {"C_detected", "Clans detected"},
 
                 {"userinfo_nofound", "Failed to get playtime info for {0}! trying again in 300 seconds!"},
@@ -336,6 +338,7 @@ namespace Oxide.Plugins
                 {"holding_item", "The items name is {0}"},
                 {"notholding_item", "You need to hold a Raiding Tool to get the name!"},
                 {"Not_Supported", "This Raiding Tool is not supported for \"Weapon Settings\"!"},
+                {"Increase_Refresh", "Increase \"User data refresh interval\" in the Config and reload! Can't be less or equal than 10 seconds." },
 
                 {"secs", " seconds"},
                 {"mins", " minutes"},
@@ -348,6 +351,7 @@ namespace Oxide.Plugins
         }
 
         #endregion
+
         #region DataFile/Classes
 
         private class BuildingInfo
@@ -410,6 +414,7 @@ namespace Oxide.Plugins
             public Dictionary<ulong, int> AttackAttempts = new Dictionary<ulong, int>();
             public List<ulong> playersWithNoData = new List<ulong>();
             public List<ulong> FirstMessaged = new List<ulong>();
+            public List<ulong> InTeam = new List<ulong>();
             public List<ulong> ShowTwigsNotProtected = new List<ulong>();
             public Dictionary<ulong, string> lastConnection = new Dictionary<ulong, string>();
             public List<ulong> IgnoredPlayers = new List<ulong>();
@@ -436,6 +441,7 @@ namespace Oxide.Plugins
         StoredDataItemList storedDataItemList;
 
         #endregion
+
         #region Setup/Saving
         private void Init()
         {
@@ -475,11 +481,6 @@ namespace Oxide.Plugins
             StartChecking();
             CheckPlayersWithNoInfo();
 
-            if (Clans != null)
-            {
-                timer.Every(60f, RefreshClanCache);
-            }
-
             if (!config.Advance.OnServerSave)
             {
                 float args = config.Advance.SaveFrequency;
@@ -488,23 +489,61 @@ namespace Oxide.Plugins
                 timer.Every(offset, SaveData);
             }
 
-            if (debug) PrintWarning($"Debug Version: {debugversion}");
+            if (beta) PrintWarning($"Debug Version: {betaversion}");
+
+            if (config.Advance.Frequency <= 10)
+            {
+                timer.Every(15f, () =>
+                {
+                    PrintWarning(lang.GetMessage("Increase_Refresh", this, null));
+                });
+            }
 
             if (PlaytimeTracker == null)
             {
                 PrintWarning(lang.GetMessage("pt_notInstalled", this, null));
+                CheckingPT = timer.Every(15f, () =>
+                {
+                    if (PlaytimeTracker == null)
+                    {
+                        PrintWarning(lang.GetMessage("pt_notInstalled", this, null));
+                    }
+                    else
+                    {
+                        PrintWarning(lang.GetMessage("pt_detected", this, null));
+                        timer.Destroy(ref CheckingPT);
+                    }
+
+                });
+            }
+            if (config.Relationship.CheckClan && Clans != null)
+            {
+                timer.Every(60f, RefreshClanCache);
             }
             if (config.Relationship.CheckClan && Clans == null)
             {
                 PrintWarning(lang.GetMessage("C_notInstalled", this, null));
+                CheckingC = timer.Every(15f, () =>
+                {
+                    if (Clans == null)
+                    {
+                        PrintWarning(lang.GetMessage("C_notInstalled", this, null));
+                    }
+                    else
+                    {
+                        PrintWarning(lang.GetMessage("C_detected", this, null));
+                        timer.Destroy(ref CheckingC);
+                    }
+
+                });
             }
         }
 
         private void Unload()
         {
+            LeaderLower.Clear();
             SaveData();
             SaveDataItemList();
-
         }
 
         private void OnServerSave()
@@ -512,8 +551,429 @@ namespace Oxide.Plugins
             if (config.Advance.OnServerSave) timer.Once(UnityEngine.Random.Range(5, 15), SaveData);
         }
 
+        private void OnNewSave()
+        {
+            if (config.Other.MapWipe == true)
+            {
+                storedData.players.Clear();
+                storedData.IgnoredPlayers.Clear();
+                storedData.lastConnection.Clear();
+                storedData.ShowTwigsNotProtected.Clear();
+                storedData.InTeam.Clear();
+                storedData.FirstMessaged.Clear();
+                storedData.playersWithNoData.Clear();
+                storedData.AttackAttempts.Clear();
+                SaveData();
+                PrintWarning("New savefile detected. All Player Data was cleared!");
+            }
+        }
+
         #endregion
-        #region Hooks
+
+        #region Commands
+        private Dictionary<string, string> AdminCommands = new Dictionary<string, string>
+        {
+            { "antinoob", "AntiNoobCommand" },
+            { "checkname", "CheckNameCmd" },
+            { "refunditem", "RefundCmd" },
+        };
+
+        private void AntiNoobCommand(IPlayer player, string command, string[] args)
+        {
+            if (args.Length < 1)
+            {
+                player.Reply(lang.GetMessage("antinoobcmd_syntax", this, player.Id));
+                return;
+            }
+
+            switch (args[0].ToLower())
+            {
+                case "addnoob":
+                    {
+                        if (args.Length < 2)
+                        {
+                            player.Reply(lang.GetMessage("antinoobcmd_addnoob_syntax", this, player.Id));
+                            return;
+                        }
+
+                        var p = covalence.Players.FindPlayer(args[1]);
+                        if (p == null)
+                        {
+                            player.Reply(lang.GetMessage("NoPlayerFound", this, player.Id), null, args[1]);
+                            return;
+                        }
+
+                        foreach (var entry in storedData.players)
+                        {
+                            if (entry.Key == ulong.Parse(p.Id))
+                            {
+                                if (storedData.players[entry.Key] == -25d)
+                                {
+                                    player.Reply(lang.GetMessage("antinoobcmd_alreadynoob", this, player.Id), null, p.Name);
+                                    return;
+                                }
+
+                                storedData.players[entry.Key] = -25d;
+                                player.Reply(lang.GetMessage("antinoobcmd_marked", this, player.Id), null, p.Name);
+                                return;
+                            }
+                        }
+                        player.Reply(lang.GetMessage("NoPlayerFound", this, player.Id), null, args[1]);
+                        return;
+                    }
+
+                case "removenoob":
+                    {
+                        if (args.Length < 2)
+                        {
+                            player.Reply(lang.GetMessage("antinoobcmd_removenoob_syntax", this, player.Id));
+                            return;
+                        }
+
+                        var p = covalence.Players.FindPlayer(args[1]);
+                        if (p == null)
+                        {
+                            player.Reply(lang.GetMessage("NoPlayerFound", this, player.Id), null, args[1]);
+                        }
+
+                        foreach (var entry in storedData.players)
+                        {
+                            if (entry.Key == ulong.Parse(p.Id))
+                            {
+                                if (storedData.players[entry.Key] == -50d)
+                                {
+
+                                    player.Reply(lang.GetMessage("antinoobcmd_missingnoob", this, player.Id), null, p.Name);
+                                    return;
+                                }
+
+                                storedData.players[entry.Key] = -50d;
+                                player.Reply(lang.GetMessage("antinoobcmd_removednoob", this, player.Id), null, p.Name);
+                                return;
+                            }
+                        }
+
+                        player.Reply(lang.GetMessage("NoPlayerFound", this, player.Id), null, args[1]);
+                        return;
+                    }
+
+                case "wipe":
+                    {
+                        if (args.Length < 2)
+                        {
+                            player.Reply(lang.GetMessage("antinoobcmd_wipe_syntax", this, player.Id));
+                            return;
+                        }
+
+                        switch (args[1].ToLower())
+                        {
+                            case "all":
+                                {
+                                    storedData.lastConnection.Clear();
+                                    storedData.playersWithNoData.Clear();
+                                    storedData.FirstMessaged.Clear();
+                                    storedData.AttackAttempts.Clear();
+                                    storedDataItemList.ItemList.Clear();
+                                    storedData.players.Clear();
+                                    player.Reply(lang.GetMessage("dataFileWiped", this, player.Id));
+                                    return;
+                                }
+
+                            case "playerdata":
+                                {
+                                    storedData.players.Clear();
+                                    player.Reply(lang.GetMessage("dataFileWiped_playerdata", this, player.Id));
+                                    return;
+                                }
+
+                            case "attempts":
+                                {
+                                    storedData.AttackAttempts.Clear();
+                                    player.Reply(lang.GetMessage("dataFileWiped_attempts", this, player.Id));
+                                    return;
+                                }
+
+                            default:
+                                {
+                                    player.Reply(lang.GetMessage("antinoobcmd_wipe_syntax", this, player.Id));
+                                    return;
+                                }
+                        }
+                    }
+
+                default:
+                    {
+                        player.Reply(lang.GetMessage("antinoobcmd_syntax", this, player.Id));
+                        return;
+                    }
+            }
+        }
+
+        [ChatCommand("checknew")]
+        private void CheckNewCmd(BasePlayer player, string command, string[] args)
+        {
+            BaseEntity hitEnt = GetLookAtEntity(player);
+            if (hitEnt == null)
+            {
+                SendReply(player, lang.GetMessage("NotLooking", this, player.UserIDString));
+                return;
+            }
+
+            if (config.Messages.ShowMessage && config.Other.IgnoreTwig && (hitEnt as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs)
+            {
+                SendReply(player, lang.GetMessage("twig_can_attack", this, player.UserIDString));
+                return;
+            }
+
+            ulong owner = config.Other.CheckFullOwnership ? FullOwner(hitEnt) : hitEnt.OwnerID;
+
+            if (owner == 0u || !storedData.players.ContainsKey(owner)) return;
+            MessagePlayer(player, owner);
+        }
+
+        [ChatCommand("entdebug")]
+        private void EntDebugCmd(BasePlayer player, string command, string[] args)
+        {
+            if (!player.IsAdmin) return;
+
+            BaseEntity ent = GetLookAtEntity(player);
+
+            if (ent == null)
+            {
+                SendReply(player, "No entity");
+                return;
+            }
+
+            var ownerid = (FullOwner(ent) != 0) ? FullOwner(ent) : ent.OwnerID;
+
+            if (args.Length < 1)
+            {
+                SendReply(player, "OwnerID: " + ent.OwnerID);
+                SendReply(player, "FullOwner: " + FullOwner(ent));
+
+                if (storedData.players.ContainsKey(ownerid))
+                {
+                    var tiem = (int)storedData.players[ownerid];
+                    switch (tiem)
+                    {
+                        case -25:
+                            {
+                                SendReply(player, "Time: -25d (manually set noob)");
+                                break;
+                            }
+
+                        case -50:
+                            {
+                                SendReply(player, "Time: -50d (damaged structure, clan lost protection, inactive)");
+                                break;
+                            }
+
+                        default:
+                            {
+                                SendReply(player, "Time: " + tiem + " ('natural' time)");
+                                if (tiem >= config.Main.ProtectionTime) SendReply(player, "Should be raidable");
+                                else SendReply(player, "Shouldn't be raidable");
+                                break;
+                            }
+                    }
+                }
+
+                else SendReply(player, "StoredData does not contain info for " + ownerid);
+                return;
+            }
+
+            var t = ulong.Parse(args[0]);
+            ent.OwnerID = t;
+            ent.SendNetworkUpdate();
+            SendReply(player, "Set OwnerID: " + ent.OwnerID);
+            return;
+        }
+
+        private void CheckNameCmd(IPlayer p, string command, string[] args)
+        {
+            BasePlayer player = p.Object as BasePlayer;
+            BaseEntity hitEnt = GetLookAtEntity(player);
+            Item helditem = player.GetActiveItem();
+
+            if (player == null) return;
+
+            if (args.Length < 1)
+            {
+                return;
+            }
+
+            switch (args[0].ToLower())
+            {
+                case "looking":
+                    {
+                        if (hitEnt == null)
+                        {
+                            p.Reply(lang.GetMessage("notlooking_item", this, p.Id));
+                            return;
+                        }
+
+                        if (hitEnt != null)
+                        {
+                            p.Reply(lang.GetMessage("looking_item", this, player.UserIDString), null, hitEnt);
+                            return;
+                        }
+
+                        return;
+                    }
+
+                case "holding":
+                    {
+                        if (helditem == null)
+                        {
+                            p.Reply(lang.GetMessage("notholding_item", this, p.Id));
+                            return;
+                        }
+
+                        if (NotSupportedRaidTools.ContainsKey(helditem.info.shortname))
+                        {
+                            p.Reply(lang.GetMessage("Not_Supported", this, p.Id));
+                            return;
+                        }
+
+                        if (RaidToolsCheck.ContainsKey(helditem.info.shortname))
+                        {
+                            p.Reply(lang.GetMessage("holding_item", this, player.UserIDString), null, RaidToolsCheck[helditem.info.shortname]);
+                            return;
+                        }
+                        else
+
+                        {
+                            p.Reply(lang.GetMessage("notholding_item", this, p.Id));
+                            return;
+                        }
+                    }
+            }
+        }
+
+        private void RefundCmd(IPlayer p, string command, string[] args)
+        {
+            BasePlayer player = p.Object as BasePlayer;
+            if (player == null) return;
+
+            if (args.Length < 1)
+            {
+                p.Reply(lang.GetMessage("refunditem_help", this, p.Id));
+                return;
+            }
+
+            Item helditem = player.GetActiveItem();
+
+            switch (args[0].ToLower())
+            {
+                case "add":
+                    {
+                        if (player.GetActiveItem() == null)
+                        {
+                            p.Reply(lang.GetMessage("refunditem_needholditem", this, player.UserIDString));
+                            return;
+                        }
+
+                        if (raidtools.ContainsKey(helditem.info.shortname))
+                        {
+                            if (!storedDataItemList.ItemList.ContainsKey(helditem.info.shortname))
+                            {
+                                storedDataItemList.ItemList.Add(helditem.info.shortname, raidtools[helditem.info.shortname]);
+                                p.Reply(lang.GetMessage("refunditem_added", this, player.UserIDString), null, helditem.info.displayName.english);
+                                return;
+                            }
+
+                            p.Reply(lang.GetMessage("refunditem_alreadyonlist", this, player.UserIDString));
+                            return;
+                        }
+
+                        p.Reply(lang.GetMessage("refunditem_notexplosive", this, player.UserIDString));
+
+                        SaveDataItemList();
+
+                        return;
+                    }
+
+                case "remove":
+                    {
+                        if (player.GetActiveItem() == null)
+                        {
+                            p.Reply(lang.GetMessage("refunditem_needholditem", this, player.UserIDString));
+                            return;
+                        }
+
+                        if (storedDataItemList.ItemList.ContainsKey(helditem.info.shortname))
+                        {
+                            storedDataItemList.ItemList.Remove(helditem.info.shortname);
+                            p.Reply(lang.GetMessage("refunditem_removed", this, player.UserIDString), null, helditem.info.displayName.english);
+                            return;
+                        }
+
+                        p.Reply(lang.GetMessage("refunditem_notonlist", this, player.UserIDString));
+
+                        SaveDataItemList();
+
+                        return;
+                    }
+
+                case "all":
+                    {
+                        foreach (var t in raidtools)
+
+                            if (!storedDataItemList.ItemList.ContainsKey(t.Key)) storedDataItemList.ItemList.Add(t.Key, t.Value);
+
+                        p.Reply(lang.GetMessage("refunditem_addedall", this, player.UserIDString));
+
+                        SaveDataItemList();
+
+                        return;
+                    }
+
+                case "clear":
+                    {
+                        storedDataItemList.ItemList.Clear();
+
+                        p.Reply(lang.GetMessage("refunditem_cleared", this, player.UserIDString));
+
+                        SaveDataItemList();
+
+                        return;
+                    }
+
+                case "list":
+                    {
+                        if (storedDataItemList.ItemList.Count < 1)
+                        {
+                            p.Reply(lang.GetMessage("refunditem_empty", this, player.UserIDString));
+                            return;
+                        }
+
+                        List<string> T2 = new List<string>();
+
+                        foreach (var entry in storedDataItemList.ItemList)
+                        {
+                            Item item = ItemManager.CreateByName(entry.Key, 1);
+
+                            if (item.info.displayName.english == null)
+                                LogToFile("other", "Failed to find display name for " + entry.Key, this, true);
+                            T2.Add(item?.info?.displayName?.english);
+                        }
+
+                        string final = string.Join("\n", T2.ToArray());
+                        p.Reply(lang.GetMessage("refunditem_list", this, player.UserIDString), null, final);
+                        return;
+                    }
+
+                default:
+                    {
+                        p.Reply(lang.GetMessage("refunditem_help", this, player.UserIDString));
+                        return;
+                    }
+            }
+        }
+
+        #endregion
+
+        #region Rust/uMod Hooks
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hitinfo)
         {
             var owner = config.Other.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
@@ -740,29 +1200,87 @@ namespace Oxide.Plugins
         {
             BasePlayer bp = player.Object as BasePlayer;
             LastConnect(bp.userID);
+
+            if (storedData.players.ContainsKey(bp.userID)) return;
+            storedData.players.Add(bp.userID, 0d);
         }
 
         private void OnPlayerSleepEnded(BasePlayer player)
         {
-            if (!config.Messages.MessageOnFirstConnection || storedData.FirstMessaged.Contains(player.userID)) return;
-            storedData.FirstMessaged.Add(player.userID);
-
-            var val = 0d;
-            if (storedData.players.TryGetValue(player.userID, out val) && (val > 100d || val == -50d || val == -25d)) return;
-
-            string msg = string.Format(lang.GetMessage("firstconnectionmessage", this, player.UserIDString), (config.Main.ProtectionTime / 3600d));
-            if (config.Messages.UseGT)
+            if (player is BasePlayer && !player.IsNpc)
             {
-                player.SendConsoleCommand("gametip.showgametip", msg);
-                timer.Once(10f, () => player.SendConsoleCommand("gametip.hidegametip"));
+
+                if (!player.userID.IsSteamId()) return;
+
+                if (!config.Messages.MessageOnFirstConnection || storedData.FirstMessaged.Contains(player.userID)) return;
+                storedData.FirstMessaged.Add(player.userID);
+
+                var val = 0d;
+                if (storedData.players.TryGetValue(player.userID, out val) && (val > 100d || val == -50d || val == -25d)) return;
+
+                string msg = string.Format(lang.GetMessage("firstconnectionmessage", this, player.UserIDString), (config.Main.ProtectionTime / 3600d));
+                if (config.Messages.UseGT)
+                {
+                    player.SendConsoleCommand("gametip.showgametip", msg);
+                    timer.Once(10f, () => player.SendConsoleCommand("gametip.hidegametip"));
+                }
+                else
+                {
+                    SendReply(player, msg);
+                }
             }
-            else
+        }
+
+        private void OnTeamCreated(BasePlayer player, RelationshipManager.PlayerTeam team)
+        {
+            if (config.Relationship.SyncTeamPlaytime)
             {
-                SendReply(player, msg);
+                if (storedData.InTeam.Contains(player.userID)) return;
+                storedData.InTeam.Add(player.userID);
+            }
+        }
+
+        private void OnTeamAcceptInvite(RelationshipManager.PlayerTeam team, BasePlayer player)
+        {
+            if (config.Relationship.SyncTeamPlaytime)
+            {
+                timer.Once(2f, () =>
+                {
+                    storedData.InTeam.Add(player.userID);
+                    SyncTeam(team, player.userID);
+                });
+            }
+        }
+
+        private void OnTeamKick(RelationshipManager.PlayerTeam team, ulong target)
+        {
+            if (config.Relationship.SyncTeamPlaytime)
+            {
+                if (storedData.InTeam.Contains(target)) storedData.InTeam.Remove(target);
+            }
+        }
+
+        private void OnTeamLeave(RelationshipManager.PlayerTeam team, BasePlayer player)
+        {
+            if (config.Relationship.SyncTeamPlaytime)
+            {
+                if (storedData.InTeam.Contains(player.userID)) storedData.InTeam.Remove(player.userID);
+            }
+        }
+
+        private void OnTeamDisbanded(RelationshipManager.PlayerTeam team)
+        {
+            if (config.Relationship.SyncTeamPlaytime)
+            {
+                foreach (ulong member in team.members)
+                {
+                    if (storedData.InTeam.Contains(member)) storedData.InTeam.Remove(member);
+                }
             }
         }
 
         #endregion
+
         #region API
 
         bool IgnorePlayer(object o)
@@ -818,7 +1336,6 @@ namespace Oxide.Plugins
         }
 
         #endregion
-        #region Methods
 
         #region Clans
         private bool AllowOwnerCheckTimeClans(BasePlayer attacker, ulong ID)
@@ -932,7 +1449,6 @@ namespace Oxide.Plugins
             if (playerID == 0u) return;
 
             var clanName = Clans.Call<string>("GetClanOf", playerID);
-
             if (string.IsNullOrEmpty(clanName)) return;
 
             var ClanMembers = ClanInfo.FindClanByName(clanName)?.members ?? new List<ulong>();
@@ -944,12 +1460,10 @@ namespace Oxide.Plugins
             var list = storedData.players.Where(x => x.Value != -50d && ClanMembers.Contains(x.Key));
             if (list.Count() < 1) return;
 
-
             foreach (var member in list.ToList()) storedData.players[member.Key] = -50d;
             Puts(lang.GetMessage("clan_lostnoob", this, null), clanName);
 
             string msg = string.Format(lang.GetMessage("lost_clansprotection", this, attacker.UserIDString));
-
             if (config.Messages.UseGT)
             {
                 attacker.SendConsoleCommand("gametip.showgametip", msg);
@@ -966,16 +1480,18 @@ namespace Oxide.Plugins
         #endregion
 
         #region Teams
+
         private bool AllowOwnerCheckTimeTeams(BasePlayer attacker, ulong ID)
         {
             var val = 0d;
 
             if (config.Messages.ShowOwnerTime && config.Relationship.CheckTeam)
             {
-                var instance = RelationshipManager.ServerInstance;
+                var Instance = RelationshipManager.ServerInstance;
 
                 BasePlayer ownerPlayer;
-                if (instance.cachedPlayers.TryGetValue(ID, out ownerPlayer))
+                if (Instance == null) PrintWarning("RelationshipManager instance is null! how is this even possible?");
+                if (Instance.cachedPlayers.TryGetValue(ID, out ownerPlayer))
                 {
                     if (ownerPlayer.currentTeam == attacker.currentTeam && ownerPlayer.currentTeam != 0)
                     {
@@ -990,17 +1506,16 @@ namespace Oxide.Plugins
 
         private bool CheckTeam(BaseCombatEntity entity, HitInfo hitinfo)
         {
-            var name = CheckForRaidingTools(hitinfo);
             var owner = config.Other.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
             BasePlayer attacker = hitinfo.InitiatorPlayer;
-            var instance = RelationshipManager.ServerInstance;
+            var Instance = RelationshipManager.ServerInstance;
 
             //Check Team For Owner
-            if (instance == null) PrintWarning("RelationshipManager instance is null! how is this even possible?");
+            BasePlayer ownerPlayer;
+            if (Instance == null) PrintWarning("RelationshipManager instance is null! how is this even possible?");
             else
             {
-                BasePlayer ownerPlayer;
-                if (instance.cachedPlayers.TryGetValue(owner, out ownerPlayer))
+                if (Instance.cachedPlayers.TryGetValue(owner, out ownerPlayer))
                 {
                     if (ownerPlayer.currentTeam == attacker.currentTeam && ownerPlayer.currentTeam != 0) return true;
                 }
@@ -1014,7 +1529,6 @@ namespace Oxide.Plugins
             var name = CheckForRaidingTools(hitinfo);
             var owner = config.Other.CheckFullOwnership ? FullOwner(entity) : entity.OwnerID;
             BasePlayer attacker = hitinfo.InitiatorPlayer;
-            var instance = RelationshipManager.ServerInstance;
 
             //Remove protection from whole team
             if (config.Main.UnNoobNew)
@@ -1037,90 +1551,326 @@ namespace Oxide.Plugins
 
                         MessagePlayer(attacker, owner);
                         if (config.Advance.EnableLogging) LogToFile($"TeamLostNoob", $"[{DateTime.Now}] - {attacker} lost their team noob status.", this, false);
-
                     }
-
-                    var team = RelationshipManager.ServerInstance?.teams[attacker.currentTeam];
+                    var team = RelationshipManager.ServerInstance?.FindPlayersTeam(attacker.userID);
                     foreach (var member in team.members) storedData.players[member] = -50d;
                 }
             }
         }
 
-        private void OnTeamAcceptInvite(RelationshipManager.PlayerTeam team)
+        private void SyncTeam(RelationshipManager.PlayerTeam team, ulong ID)
         {
-            timer.Once(2f, () =>
-            {                          
             foreach (ulong member in team.members)
             {
-                var LeaderPlayTime = storedData.players[team.GetLeader().userID];
+                var LeaderPlayTime = storedData.players[ID];
                 var MemberPlaytime = storedData.players[member];
 
-                if (LeaderPlayTime >= MemberPlaytime)
+                if (LeaderPlayTime == MemberPlaytime)
+                {
+                    continue;
+                }
+                if (LeaderPlayTime > MemberPlaytime)
                 {
                     if (MemberPlaytime == -50d)
                     {
-                        storedData.players[team.GetLeader().userID] = MemberPlaytime;
+                        WriteTeamData(ID, -50d);
+                        SyncTeam(team, ID);
+                        break;
                     }
-                    else
-                    {
-                        storedData.players[member] = LeaderPlayTime;
-                    }
+                    WriteTeamData(member, LeaderPlayTime);
+                    continue;
                 }
-                else if (MemberPlaytime >= LeaderPlayTime)
+                if (LeaderPlayTime < MemberPlaytime)
                 {
                     if (LeaderPlayTime == -50d)
                     {
-                        storedData.players[member] = LeaderPlayTime;
+                        WriteTeamData(member, -50d);
+                        SyncTeam(team, ID);
+                        break;
+                    }
+                    WriteTeamData(ID, MemberPlaytime);
+                    SyncTeam(team, ID);
+                    break;
+                }
+            }
+        }
+
+        // For when Plugins create Teams without calling any Rust Hooks
+        private void FailSafe()
+        {
+            var TeamManager = RelationshipManager.ServerInstance;
+
+            foreach (var team in TeamManager.teams)
+            {
+                foreach (var member in team.Value.members)
+                {
+
+                    if (storedData.players.ContainsKey(member))
+                    {
+                        if (storedData.InTeam.Contains(member)) continue;
+                        else storedData.InTeam.Add(member);
                     }
                     else
                     {
-                        storedData.players[team.GetLeader().userID] = MemberPlaytime;
+                        storedData.InTeam.Add(member);
+                        storedData.players.Add(member, 0d);
                     }
                 }
             }
-            });
-        }
 
-        private void OnPlayerConnected(BasePlayer player)
-        {
-            if (config.Relationship.SyncTeamPlaytime) SyncTeam(player);
-        }
-
-        private void SyncTeam (BasePlayer player)
-        {           
-            if (player.currentTeam > 0)
+            foreach (BasePlayer bp in BasePlayer.activePlayerList)
             {
-                var team = RelationshipManager.ServerInstance?.teams[player.currentTeam];
-
-                foreach (ulong member in team.members)
+                if (bp.currentTeam == 0)
                 {
-                    var LeaderPlayTime = storedData.players[team.GetLeader().userID];
-                    var MemberPlaytime = storedData.players[member];
-
-                    if (LeaderPlayTime >= MemberPlaytime)
+                    if (storedData.InTeam.Contains(bp.userID)) 
                     {
-                        if (MemberPlaytime == -50d)
-                        {
-                            storedData.players[team.GetLeader().userID] = MemberPlaytime;
-                        }
-                        else
-                        {
-                            storedData.players[member] = LeaderPlayTime;
-                        }
-                    }
-                    else if (MemberPlaytime >= LeaderPlayTime)
-                    {
-                        if (LeaderPlayTime == -50d)
-                        {
-                            storedData.players[member] = LeaderPlayTime;
-                        }
-                        else
-                        {
-                            storedData.players[team.GetLeader().userID] = MemberPlaytime;
-                        }
+                        storedData.InTeam.Remove(bp.userID);
                     }
                 }
             }
+
+            foreach (BasePlayer bp in BasePlayer.sleepingPlayerList)
+            {
+                if (bp.currentTeam == 0)
+                {
+                    if (storedData.InTeam.Contains(bp.userID))
+                    {
+                        storedData.InTeam.Remove(bp.userID);
+                    }
+                }
+            }
+        }
+
+        #endregion
+
+        #region Start Protection
+
+        bool HasProtection(BasePlayer player)
+        {
+            if (player == null) return false;
+
+            if (StartProtection != null && StartProtection.IsLoaded)
+            {
+                if (StartProtection.Call<bool>("HasProtection", player))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        #endregion
+
+        #region Playtime Checks
+
+        private void APICall(ulong ID)
+        {
+            if (!ID.IsSteamId()) return;
+            if (PlaytimeTracker == null)
+            {
+                Puts(lang.GetMessage("pt_notInstalled", this, null));
+                return;
+            }
+
+            double apitime = -1;
+
+            try
+            {
+                apitime = PlaytimeTracker?.Call<double>("GetPlayTime", ID.ToString()) ?? -1d;
+            }
+
+            catch (Exception)
+            {
+                Puts(lang.GetMessage("userinfo_nofound", this, null), ID);
+                if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}", this, false);
+                storedData.playersWithNoData.Add(ID);
+                timer.Once(300f, () => APICall_SecondAttempt(ID));
+            }
+
+            if (apitime != -1d)
+            {
+                var val = 0d;
+                if (storedData.players.ContainsKey(ID))
+                {
+                    if (storedData.players.TryGetValue(ID, out val) && (val >= apitime)) return;
+                    storedData.players[ID] = apitime;
+                }
+                else
+                {
+                    storedData.players.Add(ID, apitime);
+                    Puts(lang.GetMessage("userinfo_found", this, null), ID);
+                    if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Successfully got playtime info for {ID}", this, false);
+                }
+            }
+        }
+
+        private void APICall_SecondAttempt(ulong ID)
+        {
+            double apitime = -1;
+
+            try
+            {
+                apitime = PlaytimeTracker?.Call<double>("GetPlayTime", ID.ToString()) ?? -1d;
+            }
+
+            catch (Exception)
+            {
+                Puts(lang.GetMessage("userinfo_nofound_2nd_attempt", this, null), ID);
+                if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}. Has been marked as non-noob", this, false);
+
+                if (storedData.players.ContainsKey(ID))
+                {
+                    storedData.players[ID] = -50d;
+                    if (storedData.playersWithNoData.Contains(ID)) storedData.playersWithNoData.Remove(ID);
+                    if (storedData.FirstMessaged.Contains(ID) == false) storedData.FirstMessaged.Add(ID);
+                    if (storedData.ShowTwigsNotProtected.Contains(ID) == false) storedData.ShowTwigsNotProtected.Add(ID);
+
+                    return;
+                }
+                else
+                {
+                    storedData.players.Add(ID, -50d);
+                    if (storedData.playersWithNoData.Contains(ID)) storedData.playersWithNoData.Remove(ID);
+                    if (storedData.FirstMessaged.Contains(ID) == false) storedData.FirstMessaged.Add(ID);
+                    if (storedData.ShowTwigsNotProtected.Contains(ID) == false) storedData.ShowTwigsNotProtected.Add(ID);
+                }
+            }
+
+            if (apitime != -1d)
+            {
+                if (storedData.players.ContainsKey(ID)) storedData.players[ID] = apitime;
+                else
+                {
+                    storedData.players.Add(ID, apitime);
+                    Puts(lang.GetMessage("userinfo_found", this, null), ID);
+                    if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Successfully got playtime info for {ID}", this, false);
+                }
+            }
+        }
+
+        private void APICall_TeamSync(ulong ID)
+        {
+            if (!ID.IsSteamId()) return;
+            if (PlaytimeTracker == null)
+            {
+                Puts(lang.GetMessage("pt_notInstalled", this, null));
+                return;
+            }
+
+            var team = RelationshipManager.ServerInstance?.FindPlayersTeam(ID);
+
+            foreach (ulong member in team.members)
+            {
+                double apitime = PlaytimeTracker?.Call<double>("GetPlayTime", ID.ToString()) ?? -1d;
+                double apitime_member = PlaytimeTracker?.Call<double>("GetPlayTime", member.ToString()) ?? -1d;
+
+                APICall_TeamSync_Compare(ID, member, apitime, apitime_member);
+            }
+
+            APICall_TeamSync_Final(ID);
+        }
+
+        private void APICall_TeamSync_Compare(ulong ID, ulong member, double apitime, double apitime_member)
+        {
+            if (ID == member)
+            {
+                WriteTeamData(ID, apitime);
+                return;
+            }
+            if (apitime == apitime_member)
+            {
+                WriteTeamData(ID, apitime);
+                WriteTeamData(member, apitime);
+                return;
+            }
+            if (apitime > apitime_member)
+            {
+                WriteTeamData(ID, apitime);
+                WriteTeamData(member, apitime);
+                return;
+            }
+            if (apitime < apitime_member)
+            {
+                WriteTeamData(ID, apitime_member);
+                WriteTeamData(member, apitime_member);
+
+                if (LeaderLower.Contains(ID))
+                {
+                    return;
+                }
+
+                LeaderLower.Add(ID);
+                return;
+            }
+        }
+
+        private void APICall_TeamSync_Final(ulong ID)
+        {
+            var team = RelationshipManager.ServerInstance?.FindPlayersTeam(ID);
+
+            if (LeaderLower.Contains(ID))
+            {
+                LeaderLower.Remove(ID);
+                SyncTeam(team, ID);
+
+            }
+            SyncTeam(team, ID);
+            return;
+        }
+
+        private void WriteTeamData(ulong ID, double apitime)
+        {
+            if (ID == 0) return;
+            storedData.players[ID] = apitime;
+        }
+
+        private void Check()
+        {
+            if (BasePlayer.activePlayerList.Count == 0) return;
+
+            foreach (BasePlayer bp in BasePlayer.activePlayerList)
+            {
+                if (!bp.IsConnected || bp == null) continue;
+                if (storedData.playersWithNoData.Contains(bp.userID)) continue;
+
+                var val = 0d;
+
+                if (storedData.players.TryGetValue(bp.userID, out val) && (val == -50d || val == -25d)) continue;
+                if (config.Relationship.SyncTeamPlaytime && storedData.InTeam.Contains(bp.userID))
+                {
+                    APICall_TeamSync(bp.userID);
+                    continue;
+                }
+                APICall(bp.userID);
+            }
+
+            foreach (BasePlayer bp in BasePlayer.sleepingPlayerList)
+            {
+                if (storedData.playersWithNoData.Contains(bp.userID)) continue;
+
+                var val = 0d;
+
+                if (storedData.players.TryGetValue(bp.userID, out val) && (val == -50d || val == -25d)) continue;
+                if (config.Relationship.SyncTeamPlaytime && storedData.InTeam.Contains(bp.userID))
+                {
+                    APICall_TeamSync(bp.userID);
+                    continue;
+                }
+
+                APICall(bp.userID);
+            }
+        }
+
+        private void Check(ulong ID)
+        {
+            if (storedData.playersWithNoData.Contains(ID)) return;
+            if (storedData.players[ID] == -50d || storedData.players[ID] == -25d) return;
+            if (config.Relationship.SyncTeamPlaytime && storedData.InTeam.Contains(ID))
+            {
+                APICall_TeamSync(ID);
+                return;
+            }
+            APICall(ID);
         }
 
         #endregion
@@ -1447,131 +2197,7 @@ namespace Oxide.Plugins
 
         #endregion
 
-        #region Start Protection
-
-        bool HasProtection(BasePlayer player)
-        {
-            if (player == null) return false;
-
-            if (StartProtection != null && StartProtection.IsLoaded)
-            {
-                if (StartProtection.Call<bool>("HasProtection", player))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        #endregion
-
-        #region Playtime Checks
-
-        private void APICall(ulong ID)
-        {
-            if (!ID.IsSteamId()) return;
-            if (PlaytimeTracker == null)
-            {
-                Puts(lang.GetMessage("pt_notInstalled", this, null));
-                return;
-            }
-
-            double apitime = -1;
-
-            try
-            {
-                apitime = PlaytimeTracker?.Call<double>("GetPlayTime", ID.ToString()) ?? -1d;
-            }
-
-            catch (Exception)
-            {
-                Puts(lang.GetMessage("userinfo_nofound", this, null), ID);
-                if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}", this, false);
-                storedData.playersWithNoData.Add(ID);           
-                timer.Once(300f, () => APICall_SecondAttempt(ID));
-            }
-
-            if (apitime != -1d)
-            {
-                if (storedData.players.ContainsKey(ID)) storedData.players[ID] = apitime;
-                else
-                {
-                    storedData.players.Add(ID, apitime);
-                    Puts(lang.GetMessage("userinfo_found", this, null), ID);
-                    if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Successfully got playtime info for {ID}", this, false);
-                }
-            }
-        }
-
-        private void APICall_SecondAttempt(ulong ID)
-        {
-            double apitime = -1;
-
-            try
-            {
-                apitime = PlaytimeTracker?.Call<double>("GetPlayTime", ID.ToString()) ?? -1d;
-            }
-
-            catch (Exception)
-            {
-                Puts(lang.GetMessage("userinfo_nofound_2nd_attempt", this, null), ID);
-                if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Failed to get playtime info for {ID}. Has been marked as non-noob", this, false);
-
-                if (storedData.players.ContainsKey(ID))
-                {
-                    return;
-                }
-                else
-                {
-                    storedData.players.Add(ID, -50d);
-                    if (storedData.playersWithNoData.Contains(ID)) storedData.playersWithNoData.Remove(ID);
-                }
-            }
-
-            if (apitime != -1d)
-            {
-                if (storedData.players.ContainsKey(ID)) storedData.players[ID] = apitime;
-                else
-                {
-                    storedData.players.Add(ID, apitime);
-                    Puts(lang.GetMessage("userinfo_found", this, null), ID);
-                    if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Successfully got playtime info for {ID}", this, false);
-                }
-            }
-        }
-
-        private void Check()
-        {
-            if (BasePlayer.activePlayerList.Count == 0) return;
-
-            foreach (BasePlayer bp in BasePlayer.activePlayerList)
-            {
-                if (!bp.IsConnected || bp == null) continue;
-                if (storedData.playersWithNoData.Contains(bp.userID)) continue;
-                var val = 0d;
-                if (storedData.players.TryGetValue(bp.userID, out val) && (val == -50d || val == -25d)) continue;
-
-                APICall(bp.userID);
-            }
-
-            foreach (BasePlayer bp in BasePlayer.sleepingPlayerList)
-            {
-                if (storedData.playersWithNoData.Contains(bp.userID)) continue;
-                var val = 0d;
-                if (storedData.players.TryGetValue(bp.userID, out val) && (val == -50d || val == -25d)) continue;
-
-                APICall(bp.userID);
-            }
-        }
-
-        private void Check(ulong ID)
-        {
-            if (storedData.playersWithNoData.Contains(ID)) return;
-            if (storedData.players[ID] == -50d || storedData.players[ID] == -25d) return;
-            APICall(ID);
-        }
-
-        #endregion
+        #region Helper Methods
 
         private bool AllowOwnerCheckTime(BasePlayer attacker, ulong ID)
         {
@@ -1762,7 +2388,8 @@ namespace Oxide.Plugins
                     if (storedData.players.ContainsKey(ID))
                     {
                         string date = "[" + DateTime.Now.ToString() + "] ";
-                        LogToFile("other", date + "Somehow info exists for player that is in data file already (" + ID + ")", this, true);
+                        Puts(lang.GetMessage("userinfo_found", this, null), ID);
+                        if (config.Advance.EnableLogging) LogToFile("playtimecollection", $"[{DateTime.Now}] - Successfully got playtime info for {ID}", this, false);
                         storedData.players[ID] = time;
                         storedData.playersWithNoData.Remove(ID);
                         continue;
@@ -1996,6 +2623,13 @@ namespace Oxide.Plugins
                     Puts(lang.GetMessage("console_lostnoobstatus", this, null), entry.Key, config.Main.InactivityRemove);
                     if (config.Advance.EnableLogging) LogToFile("inactive", $"[{DateTime.Now}] - {entry.Key} hasn't connected for {config.Main.InactivityRemove} days so he lost his noob status", this, false);
                     storedData.players[entry.Key] = -50d;
+                    if (config.Relationship.SyncTeamPlaytime && storedData.InTeam.Contains(entry.Key))
+                    {
+                        ulong ID = entry.Key;
+                        var team = RelationshipManager.ServerInstance?.FindPlayersTeam(ID);
+                        if (team == null) continue;
+                        SyncTeam(team, ID);
+                    }
                 }
             }
         }
@@ -2056,413 +2690,21 @@ namespace Oxide.Plugins
 
         private void StartChecking()
         {
-            timer.Every(config.Advance.Frequency, () =>
+            if (config.Relationship.SyncTeamPlaytime)
+            {
+                timer.Every(config.Advance.Frequency - 5, () =>
+                {
+                    FailSafe();
+                });
+            }
+            timer.Every(config.Advance.Frequency - 5, () =>
             {
                 RemoveInactive();
+            });
+            timer.Every(config.Advance.Frequency, () =>
+            {
                 Check();
             });
-        }
-
-        #endregion
-        #region Commands
-        private Dictionary<string, string> AdminCommands = new Dictionary<string, string>
-        {
-            { "antinoob", "AntiNoobCommand" },
-            { "checkname", "CheckNameCmd" },
-            { "refunditem", "RefundCmd" },
-        };
-
-        private void AntiNoobCommand(IPlayer player, string command, string[] args)
-        {
-            if (args.Length < 1)
-            {
-                player.Reply(lang.GetMessage("antinoobcmd_syntax", this, player.Id));
-                return;
-            }
-
-            switch (args[0].ToLower())
-            {
-                case "addnoob":
-                    {
-                        if (args.Length < 2)
-                        {
-                            player.Reply(lang.GetMessage("antinoobcmd_addnoob_syntax", this, player.Id));
-                            return;
-                        }
-
-                        var p = covalence.Players.FindPlayer(args[1]);
-                        if (p == null)
-                        {
-                            player.Reply(lang.GetMessage("NoPlayerFound", this, player.Id), null, args[1]);
-                            return;
-                        }
-
-                        foreach (var entry in storedData.players)
-                        {
-                            if (entry.Key == ulong.Parse(p.Id))
-                            {
-                                if (storedData.players[entry.Key] == -25d)
-                                {
-                                    player.Reply(lang.GetMessage("antinoobcmd_alreadynoob", this, player.Id), null, p.Name);
-                                    return;
-                                }
-
-                                storedData.players[entry.Key] = -25d;
-                                player.Reply(lang.GetMessage("antinoobcmd_marked", this, player.Id), null, p.Name);
-                                return;
-                            }
-                        }
-                        player.Reply(lang.GetMessage("NoPlayerFound", this, player.Id), null, args[1]);
-                        return;
-                    }
-
-                case "removenoob":
-                    {
-                        if (args.Length < 2)
-                        {
-                            player.Reply(lang.GetMessage("antinoobcmd_removenoob_syntax", this, player.Id));
-                            return;
-                        }
-
-                        var p = covalence.Players.FindPlayer(args[1]);
-                        if (p == null)
-                        {
-                            player.Reply(lang.GetMessage("NoPlayerFound", this, player.Id), null, args[1]);
-                        }
-
-                        foreach (var entry in storedData.players)
-                        {
-                            if (entry.Key == ulong.Parse(p.Id))
-                            {
-                                if (storedData.players[entry.Key] == -50d)
-                                {
-
-                                    player.Reply(lang.GetMessage("antinoobcmd_missingnoob", this, player.Id), null, p.Name);
-                                    return;
-                                }
-
-                                storedData.players[entry.Key] = -50d;
-                                player.Reply(lang.GetMessage("antinoobcmd_removednoob", this, player.Id), null, p.Name);
-                                return;
-                            }
-                        }
-
-                        player.Reply(lang.GetMessage("NoPlayerFound", this, player.Id), null, args[1]);
-                        return;
-                    }
-
-                case "wipe":
-                    {
-                        if (args.Length < 2)
-                        {
-                            player.Reply(lang.GetMessage("antinoobcmd_wipe_syntax", this, player.Id));
-                            return;
-                        }
-
-                        switch (args[1].ToLower())
-                        {
-                            case "all":
-                                {
-                                    storedData.lastConnection.Clear();
-                                    storedData.playersWithNoData.Clear();
-                                    storedData.FirstMessaged.Clear();
-                                    storedData.AttackAttempts.Clear();
-                                    storedDataItemList.ItemList.Clear();
-                                    storedData.players.Clear();
-                                    player.Reply(lang.GetMessage("dataFileWiped", this, player.Id));
-                                    return;
-                                }
-
-                            case "playerdata":
-                                {
-                                    storedData.players.Clear();
-                                    player.Reply(lang.GetMessage("dataFileWiped_playerdata", this, player.Id));
-                                    return;
-                                }
-
-                            case "attempts":
-                                {
-                                    storedData.AttackAttempts.Clear();
-                                    player.Reply(lang.GetMessage("dataFileWiped_attempts", this, player.Id));
-                                    return;
-                                }
-
-                            default:
-                                {
-                                    player.Reply(lang.GetMessage("antinoobcmd_wipe_syntax", this, player.Id));
-                                    return;
-                                }
-                        }
-                    }
-
-                default:
-                    {
-                        player.Reply(lang.GetMessage("antinoobcmd_syntax", this, player.Id));
-                        return;
-                    }
-            }
-        }
-
-        [ChatCommand("checknew")]
-        private void CheckNewCmd(BasePlayer player, string command, string[] args)
-        {
-            BaseEntity hitEnt = GetLookAtEntity(player);
-            if (hitEnt == null)
-            {
-                SendReply(player, lang.GetMessage("NotLooking", this, player.UserIDString));
-                return;
-            }
-
-            if (config.Messages.ShowMessage && config.Other.IgnoreTwig && (hitEnt as BuildingBlock)?.grade == BuildingGrade.Enum.Twigs)
-            {
-                SendReply(player, lang.GetMessage("twig_can_attack", this, player.UserIDString));
-                return;
-            }
-
-            ulong owner = config.Other.CheckFullOwnership ? FullOwner(hitEnt) : hitEnt.OwnerID;
-
-            if (owner == 0u || !storedData.players.ContainsKey(owner)) return;
-            MessagePlayer(player, owner);
-        }
-
-        [ChatCommand("entdebug")]
-        private void EntDebugCmd(BasePlayer player, string command, string[] args)
-        {
-            if (!debug || !player.IsAdmin) return;
-
-            BaseEntity ent = GetLookAtEntity(player);
-
-            if (ent == null)
-            {
-                SendReply(player, "No entity");
-                return;
-            }
-
-            var ownerid = (FullOwner(ent) != 0) ? FullOwner(ent) : ent.OwnerID;
-
-            if (args.Length < 1)
-            {
-                SendReply(player, "OwnerID: " + ent.OwnerID);
-                SendReply(player, "FullOwner: " + FullOwner(ent));
-
-                if (storedData.players.ContainsKey(ownerid))
-                {
-                    var tiem = (int)storedData.players[ownerid];
-                    switch (tiem)
-                    {
-                        case -25:
-                            {
-                                SendReply(player, "Time: -25d (manually set noob)");
-                                break;
-                            }
-
-                        case -50:
-                            {
-                                SendReply(player, "Time: -50d (damaged structure, clan lost protection, inactive)");
-                                break;
-                            }
-
-                        default:
-                            {
-                                SendReply(player, "Time: " + tiem + " ('natural' time)");
-                                if (tiem >= config.Main.ProtectionTime) SendReply(player, "Should be raidable");
-                                else SendReply(player, "Shouldn't be raidable");
-                                break;
-                            }
-                    }
-                }
-
-                else SendReply(player, "StoredData does not contain info for " + ownerid);
-                return;
-            }
-
-            var t = ulong.Parse(args[0]);
-            ent.OwnerID = t;
-            ent.SendNetworkUpdate();
-            SendReply(player, "Set OwnerID: " + ent.OwnerID);
-            return;
-        }
-
-        private void CheckNameCmd(IPlayer p, string command, string[] args)
-        {
-            BasePlayer player = p.Object as BasePlayer;
-            BaseEntity hitEnt = GetLookAtEntity(player);
-            Item helditem = player.GetActiveItem();
-
-            if (player == null) return;
-
-            if (args.Length < 1)
-            {
-                return;
-            }
-
-            switch (args[0].ToLower())
-            {
-                case "looking":
-                    {
-                        if (hitEnt == null)
-                        {
-                            p.Reply(lang.GetMessage("notlooking_item", this, p.Id));
-                            return;
-                        }
-
-                        if (hitEnt != null)
-                        {
-                            p.Reply(lang.GetMessage("looking_item", this, player.UserIDString), null, hitEnt);
-                            return;
-                        }
-
-                        return;
-                    }
-
-                case "holding":
-                    {
-                        if (helditem == null)
-                        {
-                            p.Reply(lang.GetMessage("notholding_item", this, p.Id));
-                            return;
-                        }
-
-                        if (NotSupportedRaidTools.ContainsKey(helditem.info.shortname))
-                        {
-                            p.Reply(lang.GetMessage("Not_Supported", this, p.Id));
-                            return;
-                        }
-
-                        if (RaidToolsCheck.ContainsKey(helditem.info.shortname))
-                        {
-                            p.Reply(lang.GetMessage("holding_item", this, player.UserIDString), null, RaidToolsCheck[helditem.info.shortname]);
-                            return;
-                        }
-                        else
-
-                        {
-                            p.Reply(lang.GetMessage("notholding_item", this, p.Id));
-                            return;
-                        }
-                    }
-            }
-        }
-
-        private void RefundCmd(IPlayer p, string command, string[] args)
-        {
-            BasePlayer player = p.Object as BasePlayer;
-            if (player == null) return;
-
-            if (args.Length < 1)
-            {
-                p.Reply(lang.GetMessage("refunditem_help", this, p.Id));
-                return;
-            }
-
-            Item helditem = player.GetActiveItem();
-
-            switch (args[0].ToLower())
-            {
-                case "add":
-                    {
-                        if (player.GetActiveItem() == null)
-                        {
-                            p.Reply(lang.GetMessage("refunditem_needholditem", this, player.UserIDString));
-                            return;
-                        }
-
-                        if (raidtools.ContainsKey(helditem.info.shortname))
-                        {
-                            if (!storedDataItemList.ItemList.ContainsKey(helditem.info.shortname))
-                            {
-                                storedDataItemList.ItemList.Add(helditem.info.shortname, raidtools[helditem.info.shortname]);
-                                p.Reply(lang.GetMessage("refunditem_added", this, player.UserIDString), null, helditem.info.displayName.english);
-                                return;
-                            }
-
-                            p.Reply(lang.GetMessage("refunditem_alreadyonlist", this, player.UserIDString));
-                            return;
-                        }
-
-                        p.Reply(lang.GetMessage("refunditem_notexplosive", this, player.UserIDString));
-
-                        SaveDataItemList();
-
-                        return;
-                    }
-
-                case "remove":
-                    {
-                        if (player.GetActiveItem() == null)
-                        {
-                            p.Reply(lang.GetMessage("refunditem_needholditem", this, player.UserIDString));
-                            return;
-                        }
-
-                        if (storedDataItemList.ItemList.ContainsKey(helditem.info.shortname))
-                        {
-                            storedDataItemList.ItemList.Remove(helditem.info.shortname);
-                            p.Reply(lang.GetMessage("refunditem_removed", this, player.UserIDString), null, helditem.info.displayName.english);
-                            return;
-                        }
-
-                        p.Reply(lang.GetMessage("refunditem_notonlist", this, player.UserIDString));
-
-                        SaveDataItemList();
-
-                        return;
-                    }
-
-                case "all":
-                    {
-                        foreach (var t in raidtools)
-
-                            if (!storedDataItemList.ItemList.ContainsKey(t.Key)) storedDataItemList.ItemList.Add(t.Key, t.Value);
-
-                        p.Reply(lang.GetMessage("refunditem_addedall", this, player.UserIDString));
-
-                        SaveDataItemList();
-
-                        return;
-                    }
-
-                case "clear":
-                    {
-                        storedDataItemList.ItemList.Clear();
-
-                        p.Reply(lang.GetMessage("refunditem_cleared", this, player.UserIDString));
-
-                        SaveDataItemList();
-
-                        return;
-                    }
-
-                case "list":
-                    {
-                        if (storedDataItemList.ItemList.Count < 1)
-                        {
-                            p.Reply(lang.GetMessage("refunditem_empty", this, player.UserIDString));
-                            return;
-                        }
-
-                        List<string> T2 = new List<string>();
-
-                        foreach (var entry in storedDataItemList.ItemList)
-                        {
-                            Item item = ItemManager.CreateByName(entry.Key, 1);
-
-                            if (item.info.displayName.english == null)
-                                LogToFile("other", "Failed to find display name for " + entry.Key, this, true);
-                            T2.Add(item?.info?.displayName?.english);
-                        }
-
-                        string final = string.Join("\n", T2.ToArray());
-                        p.Reply(lang.GetMessage("refunditem_list", this, player.UserIDString), null, final);
-                        return;
-                    }
-
-                default:
-                    {
-                        p.Reply(lang.GetMessage("refunditem_help", this, player.UserIDString));
-                        return;
-                    }
-            }
         }
 
         #endregion
