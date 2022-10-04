@@ -21,14 +21,14 @@ using System.Linq;
 
 namespace Oxide.Plugins
 {
-    [Info("AntiNoobRaid", "MasterSplinter", "2.1.0", ResourceId = 2697)]
+    [Info("AntiNoobRaid", "MasterSplinter", "2.1.1", ResourceId = 2697)]
     class AntiNoobRaid : RustPlugin
     {
         [PluginReference] private Plugin PlaytimeTracker, WipeProtection, Clans, StartProtection;
 
         //Pre-release Version Number
         private bool beta = false;
-        private string betaversion = "0.3.9";
+        private string betaversion = "0.0.6";
 
         private List<BasePlayer> cooldown = new List<BasePlayer>();
         private List<BasePlayer> MessageCooldown = new List<BasePlayer>();
@@ -981,7 +981,9 @@ namespace Oxide.Plugins
             var dmgType = hitinfo?.damageTypes?.GetMajorityDamageType() ?? DamageType.Generic;
             string name = CheckForRaidingTools(hitinfo);
 
-            if (hitinfo == null || entity == null) return null; //null checks
+            if (hitinfo == null || entity == null || attacker == null || owner == 0) return null; //null checks
+
+            if (!entity.OwnerID.IsSteamId() || !attacker.userID.IsSteamId()) return null;
 
             if (entity?.OwnerID == attacker?.userID) return null;
 
@@ -1831,6 +1833,7 @@ namespace Oxide.Plugins
             foreach (BasePlayer bp in BasePlayer.activePlayerList)
             {
                 if (!bp.IsConnected || bp == null) continue;
+                if (!bp.userID.IsSteamId()) continue;
                 if (storedData.playersWithNoData.Contains(bp.userID)) continue;
 
                 var val = 0d;
@@ -1846,6 +1849,8 @@ namespace Oxide.Plugins
 
             foreach (BasePlayer bp in BasePlayer.sleepingPlayerList)
             {
+                if (bp == null) continue;
+                if (!bp.userID.IsSteamId()) continue;
                 if (storedData.playersWithNoData.Contains(bp.userID)) continue;
 
                 var val = 0d;
